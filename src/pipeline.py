@@ -186,6 +186,11 @@ class Pipeline:
                     left_record = self.preprocessor.get_record(left_id)
                     right_record = self.preprocessor.get_record(right_id)
                     if left_record and right_record:
+                        # Add personId to the records for reference
+                        left_record = left_record.copy()  # Make a copy to avoid modifying original
+                        right_record = right_record.copy()
+                        left_record['personId'] = left_id
+                        right_record['personId'] = right_id
                         prepared_pairs.append((left_record, right_record))
                     else:
                         logger.warning(f"Skipping pair with missing records: {left_id}, {right_id}")

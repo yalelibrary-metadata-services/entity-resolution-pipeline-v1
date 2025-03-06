@@ -194,7 +194,7 @@ class BatchProcessor:
         extracting features from pairs of records.
         
         Args:
-            record_pairs: List of (left_id, right_id) tuples
+            record_pairs: List of (left_record, right_record) tuples
             preprocessor: Preprocessor instance for record lookup
             query_engine: Query engine for vector retrieval
             feature_extractor: Feature extractor for feature calculation
@@ -207,18 +207,18 @@ class BatchProcessor:
             
             # Define batch preparation function
             def prepare_batch(batch_pairs):
-                # Collect all record IDs in the batch
-                all_ids = set()
-                for left_id, right_id in batch_pairs:
-                    all_ids.add(left_id)
-                    all_ids.add(right_id)
-                
-                # Pre-fetch all records
-                records = {record_id: preprocessor.get_record(record_id) for record_id in all_ids}
+                # Collect all records in the batch
+                all_records = {}
+                for left_record, right_record in batch_pairs:
+                    # Store records by their personId
+                    if isinstance(left_record, dict) and 'personId' in left_record:
+                        all_records[left_record['personId']] = left_record
+                    if isinstance(right_record, dict) and 'personId' in right_record:
+                        all_records[right_record['personId']] = right_record
                 
                 # Collect all field hashes that will be needed
                 hash_field_pairs = []
-                for record in records.values():
+                for record in all_records.values():
                     if record is None:
                         continue
                     for field in feature_extractor.fields_to_embed:
@@ -230,32 +230,32 @@ class BatchProcessor:
                 
                 # Warm up cache with batch fetch
                 query_engine.warm_cache_for_batch(
-                    [(records.get(left_id), records.get(right_id)) 
-                     for left_id, right_id in batch_pairs 
-                     if records.get(left_id) is not None and records.get(right_id) is not None],
+                    [(left_record, right_record) 
+                    for left_record, right_record in batch_pairs 
+                    if left_record is not None and right_record is not None],
                     feature_extractor.fields_to_embed
                 )
                 
                 return {
-                    'records': records,
+                    'records': all_records,
                     'hash_field_pairs': hash_field_pairs
                 }
             
             # Define item processing function
             def process_pair(pair, batch_data):
-                left_id, right_id = pair
-                records = batch_data['records']
-                
-                left_record = records.get(left_id)
-                right_record = records.get(right_id)
+                left_record, right_record = pair
                 
                 # Skip if either record is missing
                 if left_record is None or right_record is None:
-                    logger.warning(f"Missing record for pair: {left_id}, {right_id}")
+                    logger.warning(f"Missing record in pair")
                     return None
                 
                 # Extract features
-                return feature_extractor.extract_features(left_record, right_record, query_engine)
+                try:
+                    return feature_extractor.extract_features(left_record, right_record, query_engine)
+                except Exception as e:
+                    logger.error(f"Error extracting features: {e}")
+                    return None
             
             # Process in batches with parallelization
             feature_vectors = []
