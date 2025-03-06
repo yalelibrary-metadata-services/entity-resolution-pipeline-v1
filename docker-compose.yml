@@ -40,11 +40,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-networks:
-  entity_resolution_network:
-    driver: bridge
-
   prometheus:
     image: prom/prometheus:v2.45.0
     ports:
@@ -60,6 +55,12 @@ networks:
       - '--web.enable-lifecycle'
     depends_on:
       - weaviate
+    networks:
+      - entity_resolution_network  
+
+networks:
+  entity_resolution_network:
+    driver: bridge
 
 volumes:
   weaviate_data:
