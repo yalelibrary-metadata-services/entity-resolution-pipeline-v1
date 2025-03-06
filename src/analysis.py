@@ -235,29 +235,37 @@ class Analyzer:
         except Exception as e:
             logger.error(f"Error generating indexing visualizations: {e}")
     
-    def analyze_training(self, classifier):
-        """Analyze classifier training results"""
-        with Timer() as timer:
-            logger.info("Analyzing classifier training results")
-            
-            # Get metrics and feature importance
-            metrics = classifier.metrics
-            
-            if not metrics:
-                logger.warning("No training metrics available")
-                return
-            
-            # Save metrics to JSON
-            with open(self.output_dir / 'training_metrics.json', 'w') as f:
-                json.dump(metrics, f, indent=2)
-            
-            # Generate visualizations if enabled
-            if self.visualizations_enabled:
-                self._visualize_training_metrics(metrics)
-            
-            logger.info(f"Training analysis completed")
+    # In src/analysis.py, update the analyze_training method
+
+def analyze_training(self, classifier, feature_extractor=None):
+    """Analyze classifier training results"""
+    with Timer() as timer:
+        logger.info("Analyzing classifier training results")
         
-        logger.info(f"Training analysis time: {timer.elapsed:.2f} seconds")
+        # Get metrics and feature importance
+        metrics = classifier.metrics
+        
+        if not metrics:
+            logger.warning("No training metrics available")
+            return
+        
+        # Add RFE results if available
+        if feature_extractor and hasattr(feature_extractor, 'get_rfe_results'):
+            rfe_results = feature_extractor.get_rfe_results()
+            if rfe_results:
+                metrics['rfe_results'] = rfe_results
+        
+        # Save metrics to JSON
+        with open(self.output_dir / 'training_metrics.json', 'w') as f:
+            json.dump(metrics, f, indent=2)
+        
+        # Generate visualizations if enabled
+        if self.visualizations_enabled:
+            self._visualize_training_metrics(metrics)
+        
+        logger.info(f"Training analysis completed")
+    
+    logger.info(f"Training analysis time: {timer.elapsed:.2f} seconds")
     
     def _visualize_training_metrics(self, metrics):
         """Generate visualizations for training metrics"""

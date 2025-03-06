@@ -8,6 +8,9 @@ import logging
 import numpy as np
 from scipy.spatial.distance import cosine
 import Levenshtein
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
+from weaviate.classes.query import Filter, MetadataQuery
 
 from .utils import Timer
 
@@ -39,6 +42,16 @@ class FeatureExtractor:
         
         # Feature names for reference
         self.feature_names = self._get_feature_names()
+        
+        # RFE configuration
+        self.rfe_enabled = config['features']['recursive_feature_elimination']['enabled']
+        self.rfe_step = config['features']['recursive_feature_elimination']['step']
+        self.rfe_cv = config['features']['recursive_feature_elimination']['cv']
+        
+        # RFE model and selected features
+        self.rfe_model = None
+        self.selected_features = None
+        self.selected_feature_indices = None
     
     def _compile_birth_death_pattern(self):
         """Compile regular expressions for birth-death year pattern matching"""
@@ -119,7 +132,9 @@ class FeatureExtractor:
         return feature_names
     
     def get_feature_names(self):
-        """Get feature names"""
+        """Get feature names, filtered by RFE if enabled"""
+        if self.rfe_enabled and self.selected_features is not None:
+            return self.selected_features
         return self.feature_names
     
     def extract_features(self, left_record, right_record, query_engine):
@@ -226,7 +241,84 @@ class FeatureExtractor:
         # Convert features dictionary to numpy array
         feature_vector = np.array([features.get(name, 0.0) for name in self.feature_names])
         
+        # Apply RFE if enabled and trained
+        if self.rfe_enabled and self.selected_feature_indices is not None:
+            feature_vector = feature_vector[self.selected_feature_indices]
+        
         return feature_vector
+    
+    def train_rfe(self, X, y):
+        """Train Recursive Feature Elimination model"""
+        if not self.rfe_enabled:
+            logger.info("RFE is disabled in configuration")
+            return
+        
+        logger.info("Training Recursive Feature Elimination model")
+        
+        # Create base estimator (LogisticRegression)
+        estimator = LogisticRegression(
+            solver='liblinear', 
+            max_iter=1000, 
+            random_state=42
+        )
+        
+        # Create RFE model
+        n_features = X.shape[1]
+        n_features_to_select = max(1, int(n_features / 2))  # Select half by default
+        
+        rfe = RFE(
+            estimator=estimator,
+            n_features_to_select=n_features_to_select,
+            step=self.rfe_step,
+            verbose=1
+        )
+        
+        # Fit RFE model
+        rfe.fit(X, y)
+        
+        # Get selected features
+        selected_indices = np.where(rfe.support_)[0]
+        selected_features = [self.feature_names[i] for i in selected_indices]
+        
+        logger.info(f"RFE selected {len(selected_features)} features: {selected_features}")
+        
+        # Store results
+        self.rfe_model = rfe
+        self.selected_features = selected_features
+        self.selected_feature_indices = selected_indices
+        
+        # Log feature rankings
+        feature_ranking = [(self.feature_names[i], rfe.ranking_[i]) for i in range(len(self.feature_names))]
+        feature_ranking.sort(key=lambda x: x[1])
+        logger.info("Feature rankings (lower is better):")
+        for feature, rank in feature_ranking:
+            logger.info(f"  - {feature}: {rank}")
+        
+        return self
+    
+    def get_rfe_results(self):
+        """Get RFE results for analysis"""
+        if not self.rfe_enabled or self.rfe_model is None:
+            return None
+        
+        results = {
+            'selected_features': self.selected_features,
+            'feature_rankings': []
+        }
+        
+        # Add rankings for all features
+        if hasattr(self.rfe_model, 'ranking_'):
+            for i, feature in enumerate(self.feature_names):
+                results['feature_rankings'].append({
+                    'feature': feature,
+                    'rank': int(self.rfe_model.ranking_[i]),
+                    'selected': i in self.selected_feature_indices
+                })
+            
+            # Sort by rank
+            results['feature_rankings'].sort(key=lambda x: x['rank'])
+        
+        return results
     
     def _get_vectors(self, record, query_engine):
         """Get vectors for a record"""

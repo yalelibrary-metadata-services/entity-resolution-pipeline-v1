@@ -173,11 +173,25 @@ class Pipeline:
                     )
                     feature_vectors.append(feature_vector)
                 
-                # Get feature names
+                # Convert to numpy array for RFE
+                X = np.array(feature_vectors)
+                y = np.array(labels)
+                
+                # Train RFE if enabled
+                if self.config['features']['recursive_feature_elimination']['enabled']:
+                    logger.info("Training Recursive Feature Elimination model")
+                    self.feature_extractor.train_rfe(X, y)
+                    
+                    # Get updated feature vectors if RFE is enabled
+                    if self.feature_extractor.selected_feature_indices is not None:
+                        X = X[:, self.feature_extractor.selected_feature_indices]
+                        logger.info(f"Using {X.shape[1]} features selected by RFE")
+                
+                # Get feature names (which will be filtered by RFE if enabled)
                 feature_names = self.feature_extractor.get_feature_names()
                 
                 # Train classifier
-                self.classifier.train(feature_vectors, labels, feature_names)
+                self.classifier.train(X, labels, feature_names)
                 save_checkpoint(checkpoint_path, self.classifier.get_state())
         
         logger.info(f"Training completed in {timer.elapsed:.2f} seconds")
