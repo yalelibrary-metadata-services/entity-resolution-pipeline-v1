@@ -176,7 +176,7 @@ reporting:
 # Monitoring settings
 monitoring:
   prometheus:
-    enabled: true
+    enabled: false
     port: 9090
   logging:
     file: "./logs/pipeline.log"

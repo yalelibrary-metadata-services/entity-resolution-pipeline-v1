@@ -13,6 +13,7 @@ from pathlib import Path
 from contextlib import contextmanager
 import prometheus_client as prom
 from tqdm import tqdm
+import logging.handlers
 
 # Configure logger
 logger = logging.getLogger(__name__)

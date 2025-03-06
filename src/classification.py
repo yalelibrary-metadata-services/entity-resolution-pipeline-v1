@@ -1,6 +1,5 @@
 """
-Classification module for entity resolution
-Handles classifier training and prediction
+Modified classification.py with progress bar for training stage
 """
 
 import logging
@@ -68,6 +67,7 @@ class Classifier:
     def train(self, feature_vectors, labels, feature_names=None):
         """Train the classifier"""
         with Timer() as timer:
+            print("\n==== Starting Classifier Training ====")
             logger.info("Starting classifier training")
             
             # Store feature names
@@ -82,6 +82,7 @@ class Classifier:
             X = np.array(feature_vectors)
             y = np.array(labels)
             
+            print(f"Training with {len(X)} samples ({sum(y)} positive, {len(y) - sum(y)} negative)")
             logger.info(f"Training with {len(X)} samples ({sum(y)} positive, {len(y) - sum(y)} negative)")
             
             # Normalize features
@@ -98,8 +99,10 @@ class Classifier:
                 X_train, X_val, y_train, y_val = train_test_split(
                     X_train, y_train, test_size=validation_ratio, random_state=42
                 )
+                print(f"Data split: Training set: {len(X_train)}, Validation set: {len(X_val)}, Test set: {len(X_test)}")
                 logger.info(f"Training set: {len(X_train)}, Validation set: {len(X_val)}, Test set: {len(X_test)}")
             else:
+                print(f"Data split: Training set: {len(X_train)}, Test set: {len(X_test)}")
                 logger.info(f"Training set: {len(X_train)}, Test set: {len(X_test)}")
             
             # Train using logistic regression with gradient descent
@@ -107,6 +110,8 @@ class Classifier:
             
             # Evaluate on test set
             test_metrics = self._evaluate(X_test, y_test)
+            print(f"Test set metrics: Precision: {test_metrics['precision']:.4f}, "
+                  f"Recall: {test_metrics['recall']:.4f}, F1: {test_metrics['f1']:.4f}")
             logger.info(f"Test set metrics: Precision: {test_metrics['precision']:.4f}, "
                       f"Recall: {test_metrics['recall']:.4f}, F1: {test_metrics['f1']:.4f}")
             
@@ -118,6 +123,8 @@ class Classifier:
             }
             
             self.trained = True
+            
+            print("==== Classifier Training Complete ====\n")
         
         logger.info(f"Training completed in {timer.elapsed:.2f} seconds")
         return self
@@ -134,6 +141,14 @@ class Classifier:
         patience_counter = 0
         metrics_history = []
         
+        print(f"Starting logistic regression training ({self.max_iterations} max iterations)")
+        print(f"Early stopping: {'Enabled' if self.early_stopping else 'Disabled'}")
+        print(f"Regularization: {self.reg_type}, lambda={self.reg_lambda}")
+        
+        # Progress bar setup
+        pbar = tqdm(total=self.max_iterations, desc="Training", 
+                   bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+        
         # Training loop
         for iteration in range(self.max_iterations):
             # Forward pass
@@ -144,18 +159,25 @@ class Classifier:
             
             # Compute metrics for tracking
             y_pred = (y_pred_prob >= 0.5).astype(int)
+            precision = precision_score(y_train, y_pred, zero_division=0)
+            recall = recall_score(y_train, y_pred, zero_division=0)
+            f1 = f1_score(y_train, y_pred, zero_division=0)
+            
             train_metrics = {
                 'iteration': iteration,
                 'loss': train_loss,
-                'precision': precision_score(y_train, y_pred, zero_division=0),
-                'recall': recall_score(y_train, y_pred, zero_division=0),
-                'f1': f1_score(y_train, y_pred, zero_division=0)
+                'precision': precision,
+                'recall': recall,
+                'f1': f1
             }
             
             # Validation if enabled
             if self.early_stopping and X_val is not None and y_val is not None:
                 val_pred_prob = self._sigmoid(X_val.dot(self.weights) + self.bias)
                 val_loss = self._binary_cross_entropy(y_val, val_pred_prob)
+                
+                # Update progress bar description with metrics
+                pbar.set_description(f"Training [Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, F1: {f1:.4f}]")
                 
                 # Check for early stopping
                 if val_loss < best_val_loss - self.min_delta:
@@ -170,18 +192,23 @@ class Classifier:
                 train_metrics['val_loss'] = val_loss
                 
                 if patience_counter >= self.patience:
+                    pbar.set_description(f"Early stopping at iteration {iteration} [Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, F1: {f1:.4f}]")
                     logger.info(f"Early stopping at iteration {iteration}")
                     # Restore best weights
                     self.weights = best_weights
                     self.bias = best_bias
+                    pbar.update(self.max_iterations - iteration - 1)  # Update progress bar to completion
                     break
+            else:
+                # Update progress bar description with metrics (no validation)
+                pbar.set_description(f"Training [Loss: {train_loss:.4f}, F1: {f1:.4f}]")
             
-            # Log progress
+            # Log progress periodically
             if iteration % 10 == 0:
                 logger.info(f"Iteration {iteration}: Loss: {train_loss:.4f}, "
-                          f"Precision: {train_metrics['precision']:.4f}, "
-                          f"Recall: {train_metrics['recall']:.4f}, "
-                          f"F1: {train_metrics['f1']:.4f}")
+                          f"Precision: {precision:.4f}, "
+                          f"Recall: {recall:.4f}, "
+                          f"F1: {f1:.4f}")
             
             metrics_history.append(train_metrics)
             
@@ -198,9 +225,25 @@ class Classifier:
             # Update weights
             self.weights -= self.learning_rate * dw
             self.bias -= self.learning_rate * db
+            
+            # Update progress bar
+            pbar.update(1)
+        
+        # Close progress bar
+        pbar.close()
+        
+        # Final log of best metrics
+        final_metrics = metrics_history[-1] if metrics_history else None
+        if final_metrics:
+            print(f"Final training metrics: Loss: {final_metrics['loss']:.4f}, "
+                 f"Precision: {final_metrics['precision']:.4f}, "
+                 f"Recall: {final_metrics['recall']:.4f}, "
+                 f"F1: {final_metrics['f1']:.4f}")
         
         # Store training metrics
-        self.metrics = metrics_history[-1] if metrics_history else None
+        self.metrics = final_metrics
+    
+    # Rest of the Classifier class remains unchanged...
     
     def _sigmoid(self, z):
         """Sigmoid activation function"""

@@ -134,38 +134,54 @@ class Pipeline:
         # Run analysis on indexing results
         self.analyzer.analyze_indexing(self.indexer)
     
+    # Add these lines at the top of src/pipeline.py in the run_training method
     def run_training(self, reset=False):
         """Run the training stage for classification"""
         with Timer() as timer:
             checkpoint_path = self.checkpoint_dir / "training.pkl"
             
+            print("\n=== STARTING TRAINING STAGE ===")
+            
             if not reset and checkpoint_path.exists():
+                print("Loading training results from checkpoint")
                 logger.info("Loading training results from checkpoint")
                 training_data = load_checkpoint(checkpoint_path)
                 self.classifier.load_state(training_data)
             else:
+                print("Running classifier training from scratch")
                 logger.info("Running classifier training")
+                
                 # Ensure indexing is complete
                 if not self.indexer.is_indexed():
+                    print("Indexing not complete, running indexing first")
                     self.run_indexing()
                 
                 # Set collection in query engine
+                print("Setting collection in query engine")
                 self.query_engine.set_collection(self.indexer.get_collection())
                 
                 # Load ground truth data
+                print("Loading ground truth data")
                 ground_truth_file = self.config['dataset']['ground_truth_file']
                 record_pairs, labels = self.preprocessor.load_ground_truth(ground_truth_file)
                 
                 # Extract features for training
+                print(f"Starting feature extraction for {len(record_pairs)} record pairs")
                 feature_vectors = []
-                for left_id, right_id in record_pairs:
+                
+                # Use tqdm for feature extraction progress
+                from tqdm import tqdm
+                for i, (left_id, right_id) in enumerate(tqdm(record_pairs, desc="Extracting features")):
+                    # Print periodic progress updates
+                    if i % 1000 == 0:
+                        print(f"Processed {i}/{len(record_pairs)} pairs")
+                    
                     # Get record data
                     left_record = self.preprocessor.get_record(left_id)
                     right_record = self.preprocessor.get_record(right_id)
                     
                     # Impute missing values if necessary
                     if self.config['imputation']['enabled']:
-                        # In pipeline.py, modify the imputation calls
                         left_record = self.imputer.impute_record(left_record, self.query_engine, self.preprocessor)
                         right_record = self.imputer.impute_record(right_record, self.query_engine, self.preprocessor)
                     
@@ -175,31 +191,39 @@ class Pipeline:
                     )
                     feature_vectors.append(feature_vector)
                 
+                print(f"Feature extraction complete: {len(feature_vectors)} vectors")
+                
                 # Convert to numpy array for RFE
                 X = np.array(feature_vectors)
                 y = np.array(labels)
                 
+                print(f"Feature matrix shape: {X.shape}")
+                
                 # Train RFE if enabled
                 if self.config['features']['recursive_feature_elimination']['enabled']:
+                    print("Training Recursive Feature Elimination model")
                     logger.info("Training Recursive Feature Elimination model")
                     self.feature_extractor.train_rfe(X, y)
                     
                     # Get updated feature vectors if RFE is enabled
                     if self.feature_extractor.selected_feature_indices is not None:
                         X = X[:, self.feature_extractor.selected_feature_indices]
+                        print(f"Using {X.shape[1]} features selected by RFE")
                         logger.info(f"Using {X.shape[1]} features selected by RFE")
                 
                 # Get feature names (which will be filtered by RFE if enabled)
                 feature_names = self.feature_extractor.get_feature_names()
                 
                 # Train classifier
+                print("Starting classifier training")
                 self.classifier.train(X, labels, feature_names)
+                
+                print("Saving checkpoint")
                 save_checkpoint(checkpoint_path, self.classifier.get_state())
+                
+            print("=== TRAINING STAGE COMPLETED ===")
         
         logger.info(f"Training completed in {timer.elapsed:.2f} seconds")
-        
-        # Run analysis on training results
-        self.analyzer.analyze_training(self.classifier)
     
     def run_classification(self, reset=False):
         """Run the classification stage"""

@@ -50,14 +50,14 @@ class Indexer:
         try:
             logger.info(f"Connecting to Weaviate at {self.weaviate_scheme}://{self.weaviate_host}:{self.weaviate_port}")
             client = weaviate.connect_to_local(
-                host=self.weaviate_host,
-                port=self.weaviate_port,
-                scheme=self.weaviate_scheme,
-                timeout=self.timeout
+                # host=self.weaviate_host,
+                # port=self.weaviate_port,
+                # scheme=self.weaviate_scheme,
+                # timeout=self.timeout
             )
             
             # Check connection
-            client.cluster.get_nodes_status()
+            #client.cluster.get_nodes_status()
             logger.info("Successfully connected to Weaviate")
             return client
         

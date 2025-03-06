@@ -58,10 +58,16 @@ class QueryEngine:
             hash_filter = Filter.by_property("hash").equal(hash_value)
             
             if field_type:
-                field_filter = Filter.by_property("field_type").equal(field_type)
-                combined_filter = Filter.and_operator([hash_filter, field_filter])
+                # Updated for Weaviate client v4
+                combined_filter = Filter.by_property("hash").equal(hash_value) & Filter.by_property("field_type").equal(field_type)
             else:
                 combined_filter = hash_filter
+            
+            # if field_type:
+            #     field_filter = Filter.by_property("field_type").equal(field_type)
+            #     combined_filter = Filter.and_operator([hash_filter, field_filter])
+            # else:
+            #     combined_filter = hash_filter
             
             # Execute query
             result = self.collection.query.fetch_objects(

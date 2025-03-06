@@ -95,12 +95,21 @@ class Imputer:
                     min_similarity=self.min_similarity
                 )
                 
-                if not results or len(results.objects) == 0:
+                if not results:
                     logger.debug(f"No results found for imputing {field_to_impute}")
                     return None
+                    
+                # Determine whether we have a list or a Weaviate result object
+                objects_list = results if isinstance(results, list) else results.objects
+
+                if not objects_list or len(objects_list) == 0:
+                    logger.debug(f"No objects found in results for imputing {field_to_impute}")
+                    return None
+
+                # Use objects_list throughout the rest of the method
+                first_match = objects_list[0]                                    
                 
                 # *** REQUIREMENT: Retrieve the string value for the first match ***
-                first_match = results.objects[0]
                 first_match_string = first_match.properties.get('text', '')
                 
                 # *** REQUIREMENT: Compute hash for this string ***
@@ -110,7 +119,7 @@ class Imputer:
                 weights = []
                 vectors = []
                 
-                for i, result in enumerate(results.objects):
+                for i, result in enumerate(objects_list):
                     similarity = 1.0 - result.metadata.distance  # Convert distance to similarity
                     weight = similarity * (self.similarity_weight_decay ** i)  # Apply decay
                     weights.append(weight)
@@ -183,19 +192,53 @@ class Imputer:
             # Default frequency for imputed values
             frequency = 1
             
-            # Upsert the imputed vector
-            collection.data.insert(
-                properties={
-                    "text": text_value,
-                    "hash": hash_val,
-                    "frequency": frequency,
-                    "field_type": field_type,
-                },
-                vector={"text_vector": vector.tolist()},
-                uuid=obj_uuid
-            )
+            try:
+                # First check if the object exists
+                existing_obj = collection.query.fetch_object_by_id(obj_uuid)
+                if existing_obj:
+                    # Object exists, update it
+                    collection.data.update(
+                        uuid=obj_uuid,
+                        properties={
+                            "text": text_value,
+                            "hash": hash_val,
+                            "frequency": frequency,
+                            "field_type": field_type,
+                        },
+                        vector={"text_vector": vector.tolist()}
+                    )
+                    logger.debug(f"Updated existing vector for {hash_val} in field {field_type}")
+                else:
+                    # Object doesn't exist, insert it
+                    collection.data.insert(
+                        properties={
+                            "text": text_value,
+                            "hash": hash_val,
+                            "frequency": frequency,
+                            "field_type": field_type,
+                        },
+                        vector={"text_vector": vector.tolist()},
+                        uuid=obj_uuid
+                    )
+                    logger.debug(f"Inserted new vector for {hash_val} in field {field_type}")
+            except Exception as e:
+                if "already exists" in str(e):
+                    # If it fails because the ID already exists, try updating instead
+                    collection.data.update(
+                        uuid=obj_uuid,
+                        properties={
+                            "text": text_value,
+                            "hash": hash_val,
+                            "frequency": frequency,
+                            "field_type": field_type,
+                        },
+                        vector={"text_vector": vector.tolist()}
+                    )
+                    logger.debug(f"Updated existing vector after insert failure for {hash_val} in field {field_type}")
+                else:
+                    # Re-raise if it's some other error
+                    raise
             
-            logger.debug(f"Persisted imputed vector for {hash_val} in field {field_type}")
             return True
         
         except Exception as e:
