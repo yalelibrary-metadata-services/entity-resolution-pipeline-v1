@@ -21,7 +21,7 @@ more-itertools>=9.1.0
 click>=8.1.0
 loguru>=0.7.0
 mmh3>=4.0.0
-community>=1.0.0
+community
 leidenalg>=0.9.0
 pyarrow>=12.0.0
 matplotlib-venn>=0.11.9

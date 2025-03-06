@@ -5,8 +5,8 @@ echo "Setting up Entity Resolution System for Yale University Library Catalog"
 
 # Create necessary directories
 echo "Creating directory structure..."
-mkdir -p data/input
-mkdir -p data/ground_truth
+#mkdir -p data/input
+#mkdir -p data/ground_truth
 mkdir -p checkpoints
 mkdir -p output
 mkdir -p cache/embeddings
@@ -34,7 +34,7 @@ fi
 
 # Check if Docker Compose is installed
 echo "Checking Docker Compose installation..."
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker compose &> /dev/null; then
     echo "Error: Docker Compose is not installed. Please install Docker Compose first."
     exit 1
 fi
