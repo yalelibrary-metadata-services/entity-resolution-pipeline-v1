@@ -8,6 +8,7 @@ and proper resource management
 import os
 import sys
 import time
+import tqdm
 import yaml
 import click
 import logging

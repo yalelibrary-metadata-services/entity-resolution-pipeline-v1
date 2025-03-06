@@ -188,18 +188,30 @@ class BatchProcessor:
         )
     
     def process_record_pairs(self, record_pairs, preprocessor, query_engine, feature_extractor):
-        """Process record pairs for feature extraction in optimized batches"""
+        """Process record pairs for feature extraction in batches with sequential processing and improved progress tracking"""
         with Timer() as timer:
-            logger.info(f"Processing {len(record_pairs)} record pairs for feature extraction")
+            total_pairs = len(record_pairs)
+            logger.info(f"Processing {total_pairs} record pairs for feature extraction")
             
             # Import necessary utilities at the method level to avoid circular imports
             from src.utils import compute_vector_similarity, compute_levenshtein_similarity
             
+            # Import tqdm properly
+            from tqdm import tqdm as tqdm_func
+            import time
+            
+            # Create smaller sub-batches for better progress tracking
+            sub_batch_size = min(self.batch_size, 1000)  # Use smaller sub-batches for better tracking
+            batches = list(chunk_iterable(record_pairs, sub_batch_size))
+            
+            logger.info(f"Split into {len(batches)} sub-batches of about {sub_batch_size} pairs each")
+            
             # Collect all hash-field pairs and person hashes that will be needed
+            logger.info("Collecting hash-field pairs for prefetching...")
             hash_field_pairs = []
             person_hashes = set()
             
-            for left_record, right_record in record_pairs:
+            for left_record, right_record in tqdm_func(record_pairs, desc="Preparing data", leave=False):
                 for field in feature_extractor.fields_to_embed:
                     if left_record and field in left_record and left_record[field] != "NULL":
                         hash_field_pairs.append((left_record[field], field))
@@ -221,18 +233,153 @@ class BatchProcessor:
             vectors_dict = query_engine.batch_get_vectors(hash_field_pairs)
             strings_dict = query_engine.batch_get_strings(person_hashes)
             
-            # Process in batches with parallelization
-            feature_vectors = []
-            batches = list(chunk_iterable(record_pairs, self.batch_size))
+            logger.info(f"Successfully prefetched {len(vectors_dict)} vectors and {len(strings_dict)} strings")
             
-            for batch_idx, batch in enumerate(tqdm(batches, desc="Extracting features")):
-                if batch_idx % 10 == 0:
-                    logger.info(f"Processing batch {batch_idx+1}/{len(batches)}")
+            # Process in batches with progress bar
+            all_feature_vectors = []
+            
+            # Create the main progress bar with a more accurate description
+            pbar = tqdm_func(total=total_pairs, desc="Extracting features")
+            
+            # Track sub-batch success rates for monitoring
+            successful_extractions = 0
+            total_attempted = 0
+            
+            # Define a local sequential version of extract_features_for_pair
+            def extract_features_for_pair(pair_data):
+                """Local sequential version of feature extraction function"""
+                import numpy as np
+                from scipy.spatial.distance import cosine
+                import traceback
                 
-                # Prepare data for worker processes
-                worker_data = []
+                left_record, right_record, feature_names, vectors_dict, strings_dict, fields_to_embed = pair_data
+                
+                # Skip if either record is missing
+                if left_record is None or right_record is None:
+                    return None
+                
+                try:
+                    # Extract features using only the provided data
+                    features = {}
+                    
+                    # Get vectors for both records
+                    left_vectors = {}
+                    right_vectors = {}
+                    
+                    for field in fields_to_embed:
+                        if field in left_record and left_record[field] != "NULL":
+                            key = (left_record[field], field)
+                            if key in vectors_dict:
+                                left_vectors[field] = vectors_dict[key]
+                        
+                        if field in right_record and right_record[field] != "NULL":
+                            key = (right_record[field], field)
+                            if key in vectors_dict:
+                                right_vectors[field] = vectors_dict[key]
+                    
+                    # Compute cosine similarities
+                    for field in fields_to_embed:
+                        if field in left_vectors and field in right_vectors:
+                            # Compute cosine similarity
+                            vec1 = left_vectors[field]
+                            vec2 = right_vectors[field]
+                            if vec1 is not None and vec2 is not None:
+                                try:
+                                    distance = cosine(vec1, vec2)
+                                    cosine_sim = 1.0 - distance
+                                except:
+                                    cosine_sim = 0.0
+                            else:
+                                cosine_sim = 0.0
+                            features[f"{field}_cosine"] = cosine_sim
+                        else:
+                            features[f"{field}_cosine"] = 0.0
+                    
+                    # Compute Levenshtein similarity for person names
+                    left_person_hash = left_record.get('person')
+                    right_person_hash = right_record.get('person')
+                    
+                    if left_person_hash != "NULL" and right_person_hash != "NULL":
+                        left_person = strings_dict.get(left_person_hash)
+                        right_person = strings_dict.get(right_person_hash)
+                        
+                        if left_person and right_person:
+                            # Compute Levenshtein similarity
+                            if not left_person or not right_person:
+                                levenshtein_sim = 0.0
+                            else:
+                                try:
+                                    import Levenshtein
+                                    max_len = max(len(left_person), len(right_person))
+                                    if max_len == 0:
+                                        levenshtein_sim = 1.0
+                                    else:
+                                        distance = Levenshtein.distance(left_person, right_person)
+                                        levenshtein_sim = 1.0 - (distance / max_len)
+                                except:
+                                    levenshtein_sim = 0.0
+                            features['person_levenshtein'] = levenshtein_sim
+                        else:
+                            features['person_levenshtein'] = 0.0
+                    else:
+                        features['person_levenshtein'] = 0.0
+                    
+                    # Helper function for harmonic mean
+                    def harmonic_mean(a, b):
+                        if a <= 0 or b <= 0:
+                            return 0.0
+                        return 2 * a * b / (a + b)
+                    
+                    # Add interaction features
+                    person_cosine = features.get('person_cosine', 0.0)
+                    title_cosine = features.get('title_cosine', 0.0)
+                    provision_cosine = features.get('provision_cosine', 0.0)
+                    subjects_cosine = features.get('subjects_cosine', 0.0)
+                    composite_cosine = features.get('composite_cosine', 0.0)
+                    
+                    # Calculate harmonic means
+                    features['person_title_harmonic'] = harmonic_mean(person_cosine, title_cosine)
+                    features['person_provision_harmonic'] = harmonic_mean(person_cosine, provision_cosine)
+                    features['person_subjects_harmonic'] = harmonic_mean(person_cosine, subjects_cosine)
+                    features['title_subjects_harmonic'] = harmonic_mean(title_cosine, subjects_cosine)
+                    features['title_provision_harmonic'] = harmonic_mean(title_cosine, provision_cosine)
+                    features['provision_subjects_harmonic'] = harmonic_mean(provision_cosine, subjects_cosine)
+                    
+                    # Other interaction features
+                    features['person_subjects_product'] = person_cosine * subjects_cosine
+                    
+                    if subjects_cosine > 0:
+                        features['composite_subjects_ratio'] = composite_cosine / subjects_cosine
+                    else:
+                        features['composite_subjects_ratio'] = 0.0
+                    
+                    # Simplified birth/death check
+                    features['birth_death_year_match'] = 0.0
+                    
+                    # Convert features dictionary to numpy array
+                    feature_vector = np.array([features.get(name, 0.0) for name in feature_names])
+                    
+                    return feature_vector
+                except Exception as e:
+                    # Capture the full traceback for better debugging
+                    error_msg = traceback.format_exc()
+                    # Print error but don't crash the worker
+                    print(f"Error extracting features: {str(e)}\n{error_msg}")
+                    return None
+            
+            # Process each batch sequentially
+            for batch_idx, batch in enumerate(batches):
+                batch_size = len(batch)
+                batch_start_time = time.time()
+                logger.info(f"Processing sub-batch {batch_idx+1}/{len(batches)} ({batch_size} pairs)")
+                
+                # Process each pair in the batch sequentially
+                batch_results = []
+                
+                # Prepare batch data and process sequentially with progress updates
+                counter = 0
                 for left_record, right_record in batch:
-                    # Only pass serializable data
+                    # Prepare data
                     pair_data = (
                         left_record, 
                         right_record, 
@@ -241,32 +388,55 @@ class BatchProcessor:
                         strings_dict,
                         feature_extractor.fields_to_embed
                     )
-                    worker_data.append(pair_data)
-                
-                # Process using parallel workers
-                # Process using parallel workers with safer start method
-                batch_results = Parallel(
-                    n_jobs=self.num_workers,
-                    backend="loky",  # Use loky backend
-                    loky_options={"start_method": "spawn"}  # Use 'spawn' instead of 'fork'
-                )(
-                    delayed(_extract_features_for_pair)(data) for data in worker_data
-                )
+                    
+                    # Extract features
+                    result = extract_features_for_pair(pair_data)
+                    batch_results.append(result)
+                    total_attempted += 1
+                    
+                    # Update progress bar periodically to avoid slowdown from too many updates
+                    counter += 1
+                    if counter % 10 == 0 or counter == batch_size:
+                        pbar.update(10 if counter != batch_size else counter % 10)
                 
                 # Filter out None results and add to feature vectors
                 batch_features = [vec for vec in batch_results if vec is not None]
-                feature_vectors.extend(batch_features)
+                successful_extractions += len(batch_features)
+                all_feature_vectors.extend(batch_features)
                 
-                # Update tracking
+                # Update stats
                 self.processed_batches += 1
-                self.processed_items += len(batch)
+                self.processed_items += batch_size
+                
+                # Calculate and log batch statistics
+                batch_time = time.time() - batch_start_time
+                success_rate = (len(batch_features) / batch_size) * 100 if batch_size > 0 else 0
+                pairs_per_second = batch_size / batch_time if batch_time > 0 else 0
+                
+                logger.info(f"Sub-batch {batch_idx+1} completed: {len(batch_features)}/{batch_size} " +
+                            f"successful extractions ({success_rate:.1f}%), " +
+                            f"{pairs_per_second:.1f} pairs/sec")
+                
+                # Periodically log overall progress
+                if (batch_idx + 1) % 5 == 0 or batch_idx == len(batches) - 1:
+                    overall_success_rate = (successful_extractions / total_attempted) * 100 if total_attempted > 0 else 0
+                    percent_complete = (self.processed_items / total_pairs) * 100
+                    
+                    logger.info(f"Overall progress: {percent_complete:.1f}% complete, " +
+                                f"{successful_extractions}/{total_attempted} successful extractions " +
+                                f"({overall_success_rate:.1f}%)")
             
-            logger.info(f"Feature extraction completed: {len(feature_vectors)} vectors extracted")
+            # Close progress bar
+            pbar.close()
             
+            overall_success_rate = (successful_extractions / total_attempted) * 100 if total_attempted > 0 else 0
+            logger.info(f"Feature extraction completed: {len(all_feature_vectors)}/{total_pairs} feature vectors extracted " +
+                        f"({overall_success_rate:.1f}% success rate)")
+        
         # Update total processing time
         self.total_processing_time += timer.elapsed
         
-        return feature_vectors
+        return all_feature_vectors
     
     def classify_dataset(self, person_ids, preprocessor, query_engine, feature_extractor, classifier, clusterer=None):
         """Classify dataset with optimized batch processing
@@ -432,7 +602,7 @@ class BatchProcessor:
         }
 
 def _extract_features_for_pair(pair_data):
-    """Standalone feature extraction function for multiprocessing
+    """Standalone feature extraction function for multiprocessing with improved error handling
     
     Args:
         pair_data: Tuple containing (left_record, right_record, feature_names, 
@@ -444,6 +614,7 @@ def _extract_features_for_pair(pair_data):
     import numpy as np
     from scipy.spatial.distance import cosine
     import Levenshtein  # Make sure this is installed
+    import traceback
     
     left_record, right_record, feature_names, vectors_dict, strings_dict, fields_to_embed = pair_data
     
@@ -469,7 +640,7 @@ def _extract_features_for_pair(pair_data):
                 return 1.0 / (1.0 + dist)
             else:
                 return 0.0
-        except Exception as e:
+        except Exception:
             return 0.0
     
     def compute_levenshtein_similarity(s1, s2):
@@ -486,7 +657,7 @@ def _extract_features_for_pair(pair_data):
             distance = Levenshtein.distance(s1, s2)
             similarity = 1.0 - (distance / max_len)
             return similarity
-        except Exception as e:
+        except Exception:
             return 0.0
     
     try:
@@ -570,5 +741,8 @@ def _extract_features_for_pair(pair_data):
         
         return feature_vector
     except Exception as e:
-        print(f"Error extracting features: {e}")
+        # Capture the full traceback for better debugging
+        error_msg = traceback.format_exc()
+        # Print error but don't crash the worker
+        print(f"Error extracting features: {str(e)}\n{error_msg}")
         return None

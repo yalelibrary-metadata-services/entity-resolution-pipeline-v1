@@ -153,6 +153,103 @@ def get_memory_usage() -> Dict[str, float]:
         'system_percent': psutil.virtual_memory().percent
     }
 
+def display_stage_summary(stage_name, stats, elapsed_time):
+    """Display a rich summary of pipeline stage results
+    
+    Args:
+        stage_name: Name of the pipeline stage
+        stats: Dictionary containing stage statistics
+        elapsed_time: Time taken to complete the stage in seconds
+    """
+    # Convert elapsed time to a readable format
+    if elapsed_time < 60:
+        time_str = f"{elapsed_time:.2f} seconds"
+    elif elapsed_time < 3600:
+        minutes = int(elapsed_time // 60)
+        seconds = elapsed_time % 60
+        time_str = f"{minutes} minutes, {seconds:.2f} seconds"
+    else:
+        hours = int(elapsed_time // 3600)
+        minutes = int((elapsed_time % 3600) // 60)
+        seconds = elapsed_time % 60
+        time_str = f"{hours} hours, {minutes} minutes, {seconds:.2f} seconds"
+    
+    # Create a formatted header
+    header = f" {stage_name.upper()} STAGE SUMMARY "
+    header_padding = "=" * 20
+    full_header = f"\n{header_padding}{header}{header_padding}"
+    
+    # Print the header
+    print(full_header)
+    
+    # Print time information
+    print(f"Time elapsed: {time_str}")
+    
+    # Print statistics based on stage type
+    if stage_name.lower() == "preprocessing":
+        if "unique_strings" in stats:
+            print(f"Unique strings processed: {stats['unique_strings']:,}")
+        if "records" in stats:
+            print(f"Total records processed: {stats['records']:,}")
+        if "person_ids" in stats:
+            print(f"Unique person IDs: {stats['person_ids']:,}")
+            
+    elif stage_name.lower() == "embedding":
+        if "embeddings" in stats:
+            print(f"Total embeddings generated: {stats['embeddings']:,}")
+        if "api_calls" in stats:
+            print(f"API calls made: {stats['api_calls']:,}")
+        if "tokens" in stats:
+            print(f"Total tokens used: {stats['tokens']:,}")
+        if "cache_hits" in stats:
+            print(f"Cache hits: {stats['cache_hits']:,}")
+            
+    elif stage_name.lower() == "feature_extraction":
+        if "total_pairs" in stats:
+            print(f"Total record pairs: {stats['total_pairs']:,}")
+        if "successful" in stats:
+            print(f"Successful extractions: {stats['successful']:,}")
+            success_rate = (stats['successful'] / stats['total_pairs']) * 100 if stats['total_pairs'] > 0 else 0
+            print(f"Success rate: {success_rate:.2f}%")
+        if "pairs_per_second" in stats:
+            print(f"Processing speed: {stats['pairs_per_second']:.2f} pairs/second")
+            
+    elif stage_name.lower() == "training":
+        if "train_size" in stats:
+            print(f"Training samples: {stats['train_size']:,}")
+        if "test_size" in stats:
+            print(f"Test samples: {stats['test_size']:,}")
+        if "precision" in stats:
+            print(f"Precision: {stats['precision']:.4f}")
+        if "recall" in stats:
+            print(f"Recall: {stats['recall']:.4f}")
+        if "f1" in stats:
+            print(f"F1 Score: {stats['f1']:.4f}")
+            
+    elif stage_name.lower() == "classification":
+        if "total_entities" in stats:
+            print(f"Total entities: {stats['total_entities']:,}")
+        if "match_pairs" in stats:
+            print(f"Match pairs found: {stats['match_pairs']:,}")
+        if "match_ratio" in stats:
+            print(f"Match ratio: {stats['match_ratio']:.4f} pairs per entity")
+            
+    elif stage_name.lower() == "clustering":
+        if "clusters" in stats:
+            print(f"Total clusters: {stats['clusters']:,}")
+        if "avg_cluster_size" in stats:
+            print(f"Average cluster size: {stats['avg_cluster_size']:.2f} entities")
+        if "max_cluster_size" in stats:
+            print(f"Largest cluster: {stats['max_cluster_size']:,} entities")
+    
+    # Print memory usage if available
+    if "peak_memory_mb" in stats:
+        print(f"Peak memory usage: {stats['peak_memory_mb']:.2f} MB")
+    
+    # Print footer
+    print("=" * (len(full_header) - 1))
+    print()  # Add a blank line after the summary
+
 @contextlib.contextmanager
 def monitor_memory_usage(interval: float = 5.0, log_level: int = logging.INFO) -> None:
     """Context manager to monitor memory usage during a block of code
