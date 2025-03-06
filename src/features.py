@@ -8,7 +8,6 @@ import logging
 import numpy as np
 from scipy.spatial.distance import cosine
 import Levenshtein
-from weaviate.classes.query import Filter
 
 from .utils import Timer
 
@@ -36,10 +35,46 @@ class FeatureExtractor:
         self.fields_to_embed = config['fields']['embed']
         
         # Birth/death year pattern
-        # self.birth_death_pattern = re.compile(r',\s*(\d{4})-(\d{4}|\?)')
+        self.birth_death_pattern = self._compile_birth_death_pattern()
         
         # Feature names for reference
         self.feature_names = self._get_feature_names()
+    
+    def _compile_birth_death_pattern(self):
+        """Compile regular expressions for birth-death year pattern matching"""
+        patterns = []
+        
+        # Pattern 1: Birth year with approximate death year - "565 - approximately 665"
+        patterns.append(r'(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        # Pattern 2: Approximate birth and death years
+        patterns.append(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        # Pattern 3: Approximate birth with standard death
+        patterns.append(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        # Pattern 4: Standard birth-death range
+        patterns.append(r'(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        # Pattern 5: Death year only with approximate marker
+        patterns.append(r'[-–—]\s*(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        # Pattern 6: Death year only (simple)
+        patterns.append(r'[-–—]\s*(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        # Pattern 7: Birth year only with approximate marker
+        patterns.append(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]')
+        
+        # Pattern 8: Birth year only (simple)
+        patterns.append(r'(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]')
+        
+        # Pattern 9: Explicit birth/death prefixes
+        patterns.append(r'(?:b\.|born)\s+(?:(?:approximately|ca\.|circa)\s+)?(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)|(?:d\.|died)\s+(?:(?:approximately|ca\.|circa)\s+)?(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        # Pattern 10: Single approximate year (fallback)
+        patterns.append(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
+        
+        return [re.compile(pattern) for pattern in patterns]
     
     def _get_feature_names(self):
         """Get feature names"""
@@ -184,10 +219,9 @@ class FeatureExtractor:
                 features['composite_subjects_ratio'] = 0.0
         
         # Check for birth/death year match
-        features['birth_death_year_match'] = self._check_birth_death_year_match(
-            left_person if 'left_person' in locals() else '',
-            right_person if 'right_person' in locals() else ''
-        )
+        left_person = left_person if 'left_person' in locals() else ''
+        right_person = right_person if 'right_person' in locals() else ''
+        features['birth_death_year_match'] = self._check_birth_death_year_match(left_person, right_person)
         
         # Convert features dictionary to numpy array
         feature_vector = np.array([features.get(name, 0.0) for name in self.feature_names])
@@ -243,16 +277,42 @@ class FeatureExtractor:
         if a <= 0 or b <= 0:
             return 0.0
         
-        return 2 * a * b / (a + b)    
-
+        return 2 * a * b / (a + b)
+    
+    def _extract_birth_death_years(self, person_string):
+        """Extract birth and death years from a person string."""
+        if not person_string:
+            return None, None
+            
+        # Try each pattern in order
+        for pattern in self.birth_death_pattern:
+            match = pattern.search(person_string)
+            if match:
+                # Extract matching groups depending on pattern
+                if len(match.groups()) == 1:
+                    # Patterns with only one capture group (death year only)
+                    return None, match.group(1)
+                elif len(match.groups()) == 2:
+                    if match.group(1) and match.group(2):
+                        # Complete birth-death range
+                        return match.group(1), match.group(2)
+                    elif match.group(1):
+                        # Birth year only or pattern 9 birth prefix
+                        return match.group(1), None
+                    elif match.group(2):
+                        # Pattern 9 death prefix
+                        return None, match.group(2)
+        
+        return None, None
+    
     def _check_birth_death_year_match(self, left_person, right_person):
         """Check if birth/death years match in person strings."""
         if not left_person or not right_person:
             return 0.0
         
         # Extract years from both names
-        left_birth, left_death = extract_birth_death_years(left_person)
-        right_birth, right_death = extract_birth_death_years(right_person)
+        left_birth, left_death = self._extract_birth_death_years(left_person)
+        right_birth, right_death = self._extract_birth_death_years(right_person)
         
         # Check if we have enough data to compare
         if (left_birth or left_death) and (right_birth or right_death):
@@ -296,69 +356,3 @@ class FeatureExtractor:
         X_norm = (X - min_vals) / range_vals
         
         return X_norm
-
-def extract_birth_death_years(person_string):
-    """Extract birth and death years from a person string."""
-    
-    # Pattern 1: Birth year with approximate death year
-    # Must check this specific pattern first to handle "565 - approximately 665" case
-    birth_approx_death = re.compile(r'(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = birth_approx_death.search(person_string)
-    if match:
-        return match.group(1), match.group(2)
-    
-    # Pattern 2: Approximate birth and death years
-    approx_birth_approx_death = re.compile(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = approx_birth_approx_death.search(person_string)
-    if match:
-        return match.group(1), match.group(2)
-    
-    # Pattern 3: Approximate birth with standard death
-    approx_birth_death = re.compile(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = approx_birth_death.search(person_string)
-    if match:
-        return match.group(1), match.group(2)
-    
-    # Pattern 4: Standard birth-death range
-    standard_range = re.compile(r'(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]\s*(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = standard_range.search(person_string)
-    if match:
-        return match.group(1), match.group(2)
-    
-    # Pattern 5: Death year only with approximate marker
-    approx_death_only = re.compile(r'[-–—]\s*(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = approx_death_only.search(person_string)
-    if match:
-        return None, match.group(1)
-    
-    # Pattern 6: Death year only (simple)
-    death_only = re.compile(r'[-–—]\s*(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = death_only.search(person_string)
-    if match:
-        return None, match.group(1)
-    
-    # Pattern 7: Birth year only with approximate marker
-    approx_birth_only = re.compile(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]')
-    match = approx_birth_only.search(person_string)
-    if match:
-        return match.group(1), None
-    
-    # Pattern 8: Birth year only (simple)
-    birth_only = re.compile(r'(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)\s*[-–—]')
-    match = birth_only.search(person_string)
-    if match:
-        return match.group(1), None
-    
-    # Pattern 9: Explicit birth/death prefixes (b., born, d., died)
-    prefix_pattern = re.compile(r'(?:b\.|born)\s+(?:(?:approximately|ca\.|circa)\s+)?(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)|(?:d\.|died)\s+(?:(?:approximately|ca\.|circa)\s+)?(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = prefix_pattern.search(person_string)
-    if match:
-        return (match.group(1), None) if match.group(1) else (None, match.group(2))
-    
-    # Pattern 10: Single approximate year (fallback)
-    approx_year = re.compile(r'(?:approximately|ca\.|circa)\s+(\d{2,4}(?:\?|\s+or\s+\d{1,4})?)')
-    match = approx_year.search(person_string)
-    if match:
-        return match.group(1), None
-    
-    return None, None

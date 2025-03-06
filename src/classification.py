@@ -9,10 +9,10 @@ import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_score, recall_score, f1_score
 import multiprocessing as mp
 from joblib import Parallel, delayed
+from weaviate.classes.query import Filter
 
 from .utils import Timer
 
@@ -54,6 +54,7 @@ class Classifier:
         # Initialize model weights
         self.weights = None
         self.bias = 0.0
+        self.feature_names = None
         
         # Training metrics
         self.metrics = None
@@ -64,10 +65,18 @@ class Classifier:
         # Processing state
         self.trained = False
     
-    def train(self, feature_vectors, labels):
+    def train(self, feature_vectors, labels, feature_names=None):
         """Train the classifier"""
         with Timer() as timer:
             logger.info("Starting classifier training")
+            
+            # Store feature names
+            if feature_names is None:
+                logger.warning("No feature names provided, using generic names")
+                self.feature_names = [f"feature_{i}" for i in range(len(feature_vectors[0]))]
+            else:
+                self.feature_names = feature_names
+                logger.info(f"Using {len(self.feature_names)} feature names: {self.feature_names}")
             
             # Convert to numpy arrays
             X = np.array(feature_vectors)
@@ -331,8 +340,30 @@ class Classifier:
                     
                     # Apply exact name prefilter if enabled
                     if self.exact_name_prefilter:
-                        # TODO: Implement exact name matching with birth/death years logic
-                        pass
+                        # Get original strings
+                        person_obj = query_engine.collection.query.fetch_objects(
+                            filters=Filter.by_property("hash").equal(person_hash),
+                            limit=1
+                        )
+                        
+                        candidate_obj = query_engine.collection.query.fetch_objects(
+                            filters=Filter.by_property("hash").equal(candidate_hash),
+                            limit=1
+                        )
+                        
+                        if person_obj.objects and candidate_obj.objects:
+                            person_string = person_obj.objects[0].properties.get('text', '')
+                            candidate_string = candidate_obj.objects[0].properties.get('text', '')
+                            
+                            # Use the feature extractor's birth/death year matching
+                            birth_death_match = feature_extractor._check_birth_death_year_match(
+                                person_string, candidate_string
+                            )
+                            
+                            # If birth/death years match exactly, it's a strong signal
+                            if birth_death_match > 0:
+                                matches.append((person_id, candidate_id, self.override_threshold))
+                                continue
                     
                     # Impute missing values if needed
                     if self.config['imputation']['enabled']:
@@ -366,10 +397,12 @@ class Classifier:
         if not self.trained or self.weights is None:
             return {}
         
-        # Get feature names from the feature extractor
-        # This is a placeholder - in practice, you'd need to
-        # get feature names from the feature extractor
-        feature_names = [f"feature_{i}" for i in range(len(self.weights))]
+        # Use feature names from initialization or training
+        if not self.feature_names:
+            logger.warning("No feature names available, using generic names")
+            feature_names = [f"feature_{i}" for i in range(len(self.weights))]
+        else:
+            feature_names = self.feature_names
         
         # Compute absolute weight values
         importance = np.abs(self.weights)
@@ -399,6 +432,7 @@ class Classifier:
             'feature_min': self.feature_min.tolist() if hasattr(self, 'feature_min') else None,
             'feature_max': self.feature_max.tolist() if hasattr(self, 'feature_max') else None,
             'feature_range': self.feature_range.tolist() if hasattr(self, 'feature_range') else None,
+            'feature_names': self.feature_names,
             'trained': self.trained
         }
     
@@ -409,6 +443,7 @@ class Classifier:
         
         self.bias = state['bias']
         self.metrics = state['metrics']
+        self.feature_names = state['feature_names'] if 'feature_names' in state else None
         
         if state['feature_min'] is not None:
             self.feature_min = np.array(state['feature_min'])

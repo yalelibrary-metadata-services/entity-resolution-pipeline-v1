@@ -148,6 +148,9 @@ class Pipeline:
                 if not self.indexer.is_indexed():
                     self.run_indexing()
                 
+                # Set collection in query engine
+                self.query_engine.set_collection(self.indexer.get_collection())
+                
                 # Load ground truth data
                 ground_truth_file = self.config['dataset']['ground_truth_file']
                 record_pairs, labels = self.preprocessor.load_ground_truth(ground_truth_file)
@@ -161,8 +164,8 @@ class Pipeline:
                     
                     # Impute missing values if necessary
                     if self.config['imputation']['enabled']:
-                        left_record = self.imputer.impute_record(left_record)
-                        right_record = self.imputer.impute_record(right_record)
+                        left_record = self.imputer.impute_record(left_record, self.query_engine)
+                        right_record = self.imputer.impute_record(right_record, self.query_engine)
                     
                     # Extract features
                     feature_vector = self.feature_extractor.extract_features(
@@ -170,8 +173,11 @@ class Pipeline:
                     )
                     feature_vectors.append(feature_vector)
                 
+                # Get feature names
+                feature_names = self.feature_extractor.get_feature_names()
+                
                 # Train classifier
-                self.classifier.train(feature_vectors, labels)
+                self.classifier.train(feature_vectors, labels, feature_names)
                 save_checkpoint(checkpoint_path, self.classifier.get_state())
         
         logger.info(f"Training completed in {timer.elapsed:.2f} seconds")
@@ -193,6 +199,10 @@ class Pipeline:
                 # Ensure classifier is trained
                 if not self.classifier.is_trained():
                     self.run_training()
+                
+                # Ensure query engine has collection set
+                if self.query_engine.collection is None:
+                    self.query_engine.set_collection(self.indexer.get_collection())
                 
                 # Get all personIds
                 person_ids = self.preprocessor.get_all_person_ids()
