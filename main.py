@@ -2,6 +2,7 @@
 """
 Entity Resolution Pipeline for Yale University Library Catalog
 Main entry point script for running the pipeline with enhanced progress tracking
+and proper resource management
 """
 
 import os
@@ -13,6 +14,7 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 from prometheus_client import start_http_server
+from contextlib import ExitStack
 
 # Configure logging - reduce noise from httpx
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -74,6 +76,25 @@ def print_summary(pipeline_stages, stage_times):
     print(f"  Total execution time: {total_time:.2f} seconds")
     print(f"{line}\n")
 
+def cleanup_resources(pipeline):
+    """Ensure all resources are properly cleaned up"""
+    if hasattr(pipeline, 'query_engine'):
+        # Close Weaviate connection if exists
+        if hasattr(pipeline.query_engine, 'close'):
+            try:
+                pipeline.query_engine.close()
+                logger.info("Weaviate connection properly closed")
+            except Exception as e:
+                logger.error(f"Error closing Weaviate connection: {e}")
+        
+        # Force cleanup of any lingering connections
+        try:
+            import gc
+            gc.collect()
+            logger.debug("Garbage collection performed")
+        except Exception as e:
+            logger.error(f"Error during garbage collection: {e}")
+
 @click.command()
 @click.option('--config', default='config.yml', help='Path to the configuration file')
 @click.option('--stage', default='all', 
@@ -110,77 +131,82 @@ def main(config, stage, mode, reset):
             print_stage_progress("Monitoring", f"Failed to start Prometheus server: {str(e)}")
             logger.error(f"Failed to start Prometheus server: {e}")
     
-    # Initialize the pipeline
-    print_stage_progress("Initialization", "Creating pipeline instance")
-    pipeline = Pipeline(config_data)
-    
     # Dictionary to track stage execution times
     stage_times = {}
     pipeline_stages = ['preprocessing', 'embedding', 'indexing', 
                       'training', 'classification', 'clustering', 'reporting']
     
-    # Run the requested pipeline stage
-    try:
-        if stage == 'all':
-            print_header("Running Full Pipeline")
-            for current_stage in pipeline_stages:
+    # Use ExitStack to ensure proper resource cleanup
+    with ExitStack() as stack:
+        # Initialize the pipeline
+        print_stage_progress("Initialization", "Creating pipeline instance")
+        pipeline = Pipeline(config_data)
+        
+        # Register cleanup to always run, even if an exception occurs
+        stack.callback(lambda: cleanup_resources(pipeline))
+        
+        # Run the requested pipeline stage
+        try:
+            if stage == 'all':
+                print_header("Running Full Pipeline")
+                for current_stage in pipeline_stages:
+                    stage_start_time = time.time()
+                    
+                    print_stage_progress(current_stage, "Starting...")
+                    
+                    if current_stage == 'preprocessing':
+                        pipeline.run_preprocessing(reset=reset)
+                    elif current_stage == 'embedding':
+                        pipeline.run_embedding(reset=reset)
+                    elif current_stage == 'indexing':
+                        pipeline.run_indexing(reset=reset)
+                    elif current_stage == 'training':
+                        pipeline.run_training(reset=reset)
+                    elif current_stage == 'classification':
+                        pipeline.run_classification(reset=reset)
+                    elif current_stage == 'clustering':
+                        pipeline.run_clustering(reset=reset)
+                    elif current_stage == 'reporting':
+                        pipeline.run_reporting()
+                    
+                    stage_time = time.time() - stage_start_time
+                    stage_times[current_stage] = stage_time
+                    
+                    print_stage_progress(current_stage, "Completed", stage_time)
+            else:
+                print_header(f"Running Stage: {stage}")
                 stage_start_time = time.time()
                 
-                print_stage_progress(current_stage, "Starting...")
-                
-                if current_stage == 'preprocessing':
+                if stage == 'preprocessing':
                     pipeline.run_preprocessing(reset=reset)
-                elif current_stage == 'embedding':
+                elif stage == 'embedding':
                     pipeline.run_embedding(reset=reset)
-                elif current_stage == 'indexing':
+                elif stage == 'indexing':
                     pipeline.run_indexing(reset=reset)
-                elif current_stage == 'training':
+                elif stage == 'training':
                     pipeline.run_training(reset=reset)
-                elif current_stage == 'classification':
+                elif stage == 'classification':
                     pipeline.run_classification(reset=reset)
-                elif current_stage == 'clustering':
+                elif stage == 'clustering':
                     pipeline.run_clustering(reset=reset)
-                elif current_stage == 'reporting':
+                elif stage == 'reporting':
                     pipeline.run_reporting()
                 
                 stage_time = time.time() - stage_start_time
-                stage_times[current_stage] = stage_time
+                stage_times[stage] = stage_time
                 
-                print_stage_progress(current_stage, "Completed", stage_time)
-        else:
-            print_header(f"Running Stage: {stage}")
-            stage_start_time = time.time()
-            
-            if stage == 'preprocessing':
-                pipeline.run_preprocessing(reset=reset)
-            elif stage == 'embedding':
-                pipeline.run_embedding(reset=reset)
-            elif stage == 'indexing':
-                pipeline.run_indexing(reset=reset)
-            elif stage == 'training':
-                pipeline.run_training(reset=reset)
-            elif stage == 'classification':
-                pipeline.run_classification(reset=reset)
-            elif stage == 'clustering':
-                pipeline.run_clustering(reset=reset)
-            elif stage == 'reporting':
-                pipeline.run_reporting()
-            
-            stage_time = time.time() - stage_start_time
-            stage_times[stage] = stage_time
-            
-            print_stage_progress(stage, "Completed", stage_time)
-    
-    except Exception as e:
-        print_header("PIPELINE ERROR")
-        print(f"  An error occurred during execution: {str(e)}")
-        logger.error(f"Pipeline execution error: {e}", exc_info=True)
+                print_stage_progress(stage, "Completed", stage_time)
         
-        # Print partial summary if available
-        if stage_times:
-            print_summary(pipeline_stages, stage_times)
-        
-        sys.exit(1)
+        except Exception as e:
+            print_header("PIPELINE ERROR")
+            print(f"  An error occurred during execution: {str(e)}")
+            logger.error(f"Pipeline execution error: {e}", exc_info=True)
+            
+            # Print partial summary if available
+            if stage_times:
+                print_summary(pipeline_stages, stage_times)
+            
+            sys.exit(1)
     
     # Log total execution time
     total_time = time.time() - start_time

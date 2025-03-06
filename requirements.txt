@@ -1,3 +1,7 @@
+# Entity Resolution Pipeline Requirements
+# Updated with optimized dependencies
+
+# Core packages
 numpy>=1.24.0
 pandas>=2.0.0
 scikit-learn>=1.3.0
@@ -8,24 +12,45 @@ openai>=1.3.0
 python-dotenv>=1.0.0
 pyyaml>=6.0
 tqdm>=4.66.0
+
+# Data visualization
 matplotlib>=3.7.0
 seaborn>=0.12.0
+matplotlib-venn>=0.11.9
+
+# String similarity
 python-Levenshtein>=0.21.0
+
+# API and web
 fastapi>=0.95.0
 uvicorn>=0.22.0
+
+# Monitoring and metrics
 prometheus-client>=0.17.0
+psutil>=5.9.0  # Added for memory monitoring
+
+# Parallel processing and optimization
 dask>=2023.8.0
-jsonlines>=3.1.0
 joblib>=1.3.0
 more-itertools>=9.1.0
+
+# Caching and efficiency
+diskcache>=5.4.0  # Added for efficient disk-based caching
+mmh3>=4.0.0  # Fast hashing library
+memory-profiler>=0.61.0
+contextlib2
+
+# CLI and logging
 click>=8.1.0
 loguru>=0.7.0
-mmh3>=4.0.0
-community
-leidenalg>=0.9.0
+
+# Serialization and data formats
+jsonlines>=3.1.0
 pyarrow>=12.0.0
-matplotlib-venn>=0.11.9
-typing-extensions>=4.7.0
 orjson>=3.9.0
 hjson>=3.1.0
-memory-profiler>=0.61.0
+typing-extensions>=4.7.0
+
+# Community detection for clustering
+community
+leidenalg>=0.9.0

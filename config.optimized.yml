@@ -1,0 +1,202 @@
+# Enhanced Entity Resolution Pipeline Configuration
+
+# General settings
+general:
+  mode: "development"  # development or production
+  log_level: "INFO"
+  checkpoint_dir: "./checkpoints"
+  output_dir: "./output"
+  random_seed: 42
+  batch_size: 5000  # Increased from original value
+  num_workers: 8    # Adjust based on available CPU cores
+
+# Development mode settings (subset of data)
+development:
+  max_files: 5       # Number of CSV files to process
+  max_records: 10000 # Maximum number of records to process per file
+  sample_size: 0.2   # Fraction of data to use for development
+
+# Resources allocation
+resources:
+  development:
+    max_memory_gb: 24  # Maximum memory usage in development
+    max_cpu_cores: 6   # Maximum CPU cores in development
+  production:
+    max_memory_gb: 200 # Maximum memory usage in production
+    max_cpu_cores: 60  # Maximum CPU cores in production
+
+# Dataset settings
+dataset:
+  input_dir: "./data/input"
+  ground_truth_file: "./data/ground_truth/labeled_matches.csv"
+  train_test_split: 0.8  # Fraction of labeled data to use for training
+  validation_split: 0.1  # Fraction of training data to use for validation
+
+# Field configuration
+fields:
+  embed: ["composite", "person", "title", "provision", "subjects"]
+  impute: ["provision", "subjects"]
+  required: ["person", "title", "roles"]
+  id_field: "personId"
+
+# OpenAI API settings
+openai:
+  api_key_env: "OPENAI_API_KEY"
+  embedding_model: "text-embedding-3-small"
+  embedding_dim: 1536
+  rate_limit_tpm: 5000000   # Tokens per minute
+  rate_limit_rpm: 10000     # Requests per minute
+  daily_token_limit: 500000000  # Tokens per day
+  batch_size: 200           # Increased batch size for API requests
+  retry_attempts: 3
+  retry_delay: 5            # seconds
+
+# Weaviate settings
+weaviate:
+  host: "localhost"
+  port: 8080
+  scheme: "http"
+  batch_size: 200           # Increased batch size
+  timeout: 300              # Timeout in seconds
+  collection_name: "UniqueStringsByField"
+  ef: 128                   # HNSW ef parameter
+  ef_construction: 128      # HNSW ef_construction parameter
+  max_connections: 64       # HNSW max_connections parameter
+  distance_metric: "cosine" # Distance metric: cosine, dot, l2-squared
+
+# Preprocessing settings
+preprocessing:
+  hash_algorithm: "mmh3"    # Changed to faster MurmurHash
+  min_string_frequency: 1   # Minimum frequency to keep a string
+  normalize_case: false     # Keep original case
+  mmap_enabled: true        # Use memory-mapped files for checkpoints
+
+# Embedding settings
+embedding:
+  batch_size: 200           # Increased batch size
+  cache_enabled: true       # Cache embeddings to disk
+  cache_dir: "./cache/embeddings"
+  parallel_requests: 16     # Increased parallel requests
+
+# Indexing settings
+indexing:
+  recreate_collection: false # Whether to recreate the collection or reuse existing
+  batch_size: 2000           # Increased batch size
+  upsert_mode: true          # Use upsert to avoid duplicates
+  log_frequency: 5000        # Log progress every N records
+
+# Imputation settings
+imputation:
+  enabled: true             # Enable null value imputation
+  neighbors: 10             # Number of nearest neighbors for imputation
+  min_similarity: 0.7       # Minimum similarity threshold for imputation
+  similarity_weight_decay: 0.9 # Weight decay for averaging by similarity
+
+# Querying settings
+querying:
+  max_candidates: 2000      # Maximum number of candidates per query
+  min_similarity: 0.7       # Minimum similarity threshold
+  batch_size: 200           # Increased batch size for queries
+  cache_enabled: true       # Cache query results
+  cache_dir: "./cache/queries"
+  memory_cache_enabled: true # Enable in-memory caching
+  max_memory_cache_size: 500000 # Maximum memory cache size
+  disk_cache_enabled: true   # Enable disk-based caching
+  mmap_enabled: true         # Enable memory-mapped files
+  mmap_dir: "./cache/mmap"
+
+# Batch processing settings (new section)
+batch_processing:
+  enabled: true             # Enable optimized batch processing
+  batch_size: 5000          # Batch size for processing
+  num_workers: 8            # Number of parallel workers
+  memory_limit_gb: 16       # Memory limit for batch processing
+  monitor_memory: true      # Monitor memory usage during processing
+  monitoring_interval: 30   # Memory monitoring interval in seconds
+  adaptive_batch_sizing: true # Adapt batch size based on memory usage
+
+# Feature engineering settings
+features:
+  # Basic similarity features
+  cosine_similarity: true
+  levenshtein_similarity: true
+  
+  # Field importance weights (for weighted features)
+  field_weights:
+    person: 1.0
+    title: 0.6
+    provision: 0.4
+    subjects: 0.5
+    composite: 0.8
+  
+  # Interaction features
+  interaction_features:
+    # Harmonic means
+    person_title_harmonic: true
+    person_provision_harmonic: true
+    person_subjects_harmonic: true
+    title_subjects_harmonic: true
+    title_provision_harmonic: true
+    provision_subjects_harmonic: true
+    
+    # Other interaction features
+    person_subjects_product: true
+    composite_subjects_ratio: true
+  
+  # Feature selection
+  recursive_feature_elimination:
+    enabled: false
+    step: 1
+    cv: 5
+  
+  # Name matching with birth/death years
+  exact_name_prefilter:
+    enabled: true
+    override_threshold: 0.9  # Confidence threshold to override
+
+# Classification settings
+classification:
+  algorithm: "logistic_regression"
+  match_threshold: 0.7      # Threshold for positive match
+  max_iterations: 1000      # Maximum iterations for gradient descent
+  learning_rate: 0.01       # Learning rate for gradient descent
+  regularization:
+    type: "l2"              # l1, l2, or elasticnet
+    lambda: 0.01            # Regularization strength
+  batch_size: 5000          # Increased batch size for training
+  early_stopping:
+    enabled: true
+    patience: 5
+    min_delta: 0.001
+
+# Clustering settings
+clustering:
+  algorithm: "connected_components"  # connected_components, louvain, leiden
+  similarity_threshold: 0.7  # Minimum similarity to create an edge
+  min_cluster_size: 2       # Minimum number of nodes in a cluster
+  max_cluster_size: 100     # Maximum number of nodes in a cluster
+
+# Reporting settings
+reporting:
+  output_format: ["json", "csv"]
+  detailed_metrics: true
+  save_misclassified: true
+  visualizations:
+    enabled: true
+    feature_importance: true
+    confusion_matrix: true
+    precision_recall_curve: true
+    cluster_visualization: true
+
+# Monitoring settings
+monitoring:
+  prometheus:
+    enabled: false
+    port: 9090
+  logging:
+    file: "./logs/pipeline.log"
+    max_size_mb: 100
+    backup_count: 5
+  profiling:
+    enabled: false
+    output_dir: "./profiling"

@@ -70,7 +70,7 @@ class Indexer:
         try:
             # Check if collection exists
             collections = self.client.collections.list_all()
-            collection_exists = any(c.name == self.collection_name for c in collections)
+            collection_exists = any(c == self.collection_name for c in collections)
             
             # Delete collection if it exists and recreate flag is set
             if collection_exists and self.recreate_collection:

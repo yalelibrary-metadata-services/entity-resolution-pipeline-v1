@@ -203,10 +203,49 @@ class Reporter:
                         writer.writerow([key, value])
     
     def _generate_misclassified_report(self, classifier, output_dir):
-        """Generate report of misclassified examples"""
-        # Note: This would require ground truth data to actually identify misclassifications
-        # For now, we'll just create a placeholder
-        logger.info("Skipping misclassified report (requires evaluation with ground truth)")
+        """Generate report of potential misclassifications based on confidence scores"""
+        # Get all match pairs
+        match_pairs = classifier.get_match_pairs()
+        
+        if not match_pairs:
+            logger.warning("No match pairs available for misclassification analysis")
+            return
+        
+        # Since ground truth is not available, identify potential misclassifications 
+        # based on low confidence scores
+        threshold = classifier.match_threshold
+        confidence_margin = 0.05  # Configurable margin
+        
+        potential_misclassifications = []
+        for e1, e2, confidence in match_pairs:
+            if confidence < threshold + confidence_margin:
+                potential_misclassifications.append({
+                    'entity1': e1,
+                    'entity2': e2,
+                    'confidence': confidence,
+                    'threshold': threshold,
+                    'margin': confidence - threshold
+                })
+        
+        # Sort by confidence (lowest first)
+        potential_misclassifications.sort(key=lambda x: x['confidence'])
+        
+        # Save to output
+        if potential_misclassifications:
+            df = pd.DataFrame(potential_misclassifications)
+            
+            # Save in requested formats
+            for format_type in self.output_formats:
+                if format_type == 'json':
+                    with open(output_dir / 'potential_misclassifications.json', 'w') as f:
+                        json.dump(potential_misclassifications, f, indent=2)
+                
+                elif format_type == 'csv':
+                    df.to_csv(output_dir / 'potential_misclassifications.csv', index=False)
+            
+            logger.info(f"Generated report of {len(potential_misclassifications)} potential misclassifications")
+        else:
+            logger.info("No potential misclassifications found")
     
     def _generate_summary_visualization(self, summary, output_dir):
         """Generate summary visualization"""

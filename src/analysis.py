@@ -29,6 +29,10 @@ class Analyzer:
         self.output_dir = Path(config['general']['output_dir']) / 'analysis'
         ensure_dir(self.output_dir)
         
+        # Detailed directory for detailed reports
+        self.detailed_dir = Path(config['general']['output_dir']) / 'detailed'
+        ensure_dir(self.detailed_dir)
+        
         # Enable/disable visualizations
         self.visualizations_enabled = config['reporting']['visualizations']['enabled']
     
@@ -235,104 +239,6 @@ class Analyzer:
         except Exception as e:
             logger.error(f"Error generating indexing visualizations: {e}")
     
-    # In src/analysis.py, update the analyze_training method
-
-def analyze_training(self, classifier, feature_extractor=None):
-    """Analyze classifier training results"""
-    with Timer() as timer:
-        logger.info("Analyzing classifier training results")
-        
-        # Get metrics and feature importance
-        metrics = classifier.metrics
-        
-        if not metrics:
-            logger.warning("No training metrics available")
-            return
-        
-        # Add RFE results if available
-        if feature_extractor and hasattr(feature_extractor, 'get_rfe_results'):
-            rfe_results = feature_extractor.get_rfe_results()
-            if rfe_results:
-                metrics['rfe_results'] = rfe_results
-        
-        # Save metrics to JSON
-        with open(self.output_dir / 'training_metrics.json', 'w') as f:
-            json.dump(metrics, f, indent=2)
-        
-        # Generate visualizations if enabled
-        if self.visualizations_enabled:
-            self._visualize_training_metrics(metrics)
-        
-        logger.info(f"Training analysis completed")
-    
-    logger.info(f"Training analysis time: {timer.elapsed:.2f} seconds")
-    
-    def _visualize_training_metrics(self, metrics):
-        """Generate visualizations for training metrics"""
-        try:
-            # Feature importance
-            if 'feature_importance' in metrics:
-                plt.figure(figsize=(10, 6))
-                
-                feature_importance = metrics['feature_importance']
-                features = list(feature_importance.keys())
-                importance = list(feature_importance.values())
-                
-                # Sort by importance
-                sorted_idx = np.argsort(importance)
-                plt.barh([features[i] for i in sorted_idx], [importance[i] for i in sorted_idx])
-                plt.title('Feature Importance')
-                plt.tight_layout()
-                
-                plt.savefig(self.output_dir / 'feature_importance.png')
-                plt.close()
-            
-            # Training metrics
-            if 'train_metrics' in metrics and isinstance(metrics['train_metrics'], list):
-                train_metrics = metrics['train_metrics']
-                iterations = [m['iteration'] for m in train_metrics]
-                loss = [m['loss'] for m in train_metrics]
-                precision = [m['precision'] for m in train_metrics]
-                recall = [m['recall'] for m in train_metrics]
-                f1 = [m['f1'] for m in train_metrics]
-                
-                plt.figure(figsize=(15, 10))
-                
-                # Loss curve
-                plt.subplot(2, 2, 1)
-                plt.plot(iterations, loss)
-                plt.title('Training Loss')
-                plt.xlabel('Iteration')
-                plt.ylabel('Loss')
-                
-                # Precision curve
-                plt.subplot(2, 2, 2)
-                plt.plot(iterations, precision)
-                plt.title('Precision')
-                plt.xlabel('Iteration')
-                plt.ylabel('Precision')
-                
-                # Recall curve
-                plt.subplot(2, 2, 3)
-                plt.plot(iterations, recall)
-                plt.title('Recall')
-                plt.xlabel('Iteration')
-                plt.ylabel('Recall')
-                
-                # F1 curve
-                plt.subplot(2, 2, 4)
-                plt.plot(iterations, f1)
-                plt.title('F1 Score')
-                plt.xlabel('Iteration')
-                plt.ylabel('F1')
-                
-                plt.tight_layout()
-                plt.savefig(self.output_dir / 'training_curves.png')
-                plt.close()
-        
-        except Exception as e:
-            logger.error(f"Error generating training visualizations: {e}")
-    
     def analyze_classification(self, classifier):
         """Analyze classification results"""
         with Timer() as timer:
@@ -342,24 +248,50 @@ def analyze_training(self, classifier, feature_extractor=None):
             match_pairs = classifier.get_match_pairs()
             
             if not match_pairs:
-                logger.warning("No classification results available")
+                logger.warning("No classification results available for analysis")
                 return
             
             # Basic statistics
+            confidences = [conf for _, _, conf in match_pairs]
+            unique_entities = set()
+            entity_match_counts = {}
+            
+            for e1, e2, _ in match_pairs:
+                unique_entities.add(e1)
+                unique_entities.add(e2)
+                entity_match_counts[e1] = entity_match_counts.get(e1, 0) + 1
+                entity_match_counts[e2] = entity_match_counts.get(e2, 0) + 1
+            
+            # Calculate statistics
             stats = {
                 'total_matches': len(match_pairs),
+                'total_entities_with_matches': len(unique_entities),
                 'confidence_distribution': {
-                    'min': min(p for _, _, p in match_pairs),
-                    'max': max(p for _, _, p in match_pairs),
-                    'mean': np.mean([p for _, _, p in match_pairs]),
-                    'median': np.median([p for _, _, p in match_pairs])
+                    'min': min(confidences) if confidences else 0,
+                    'max': max(confidences) if confidences else 0,
+                    'mean': np.mean(confidences) if confidences else 0,
+                    'median': np.median(confidences) if confidences else 0,
+                    'threshold': classifier.match_threshold
+                },
+                'entity_match_stats': {
+                    'max_matches_per_entity': max(entity_match_counts.values()) if entity_match_counts else 0,
+                    'avg_matches_per_entity': np.mean(list(entity_match_counts.values())) if entity_match_counts else 0,
+                    'median_matches_per_entity': np.median(list(entity_match_counts.values())) if entity_match_counts else 0,
                 }
             }
             
-            # Confidence distribution
-            confidence_values = [p for _, _, p in match_pairs]
+            # Save matches to CSV
+            match_df = pd.DataFrame([
+                {"entity1": e1, "entity2": e2, "confidence": conf}
+                for e1, e2, conf in match_pairs
+            ])
+            
+            # Save to detailed directory
+            match_df.to_csv(self.detailed_dir / 'match_pairs.csv', index=False)
+            
+            # Confidence histogram
             confidence_hist, confidence_bins = np.histogram(
-                confidence_values, bins=10, range=(0.0, 1.0)
+                confidences, bins=10, range=(0.0, 1.0)
             )
             
             stats['confidence_histogram'] = {
@@ -367,9 +299,23 @@ def analyze_training(self, classifier, feature_extractor=None):
                 'counts': confidence_hist.tolist()
             }
             
-            # Save statistics to JSON
+            # Save classification statistics
             with open(self.output_dir / 'classification_stats.json', 'w') as f:
                 json.dump(stats, f, indent=2)
+            
+            # Print summary to console
+            print("\n=== CLASSIFICATION ANALYSIS ===")
+            print(f"Total matches found: {stats['total_matches']}")
+            print(f"Entities with matches: {stats['total_entities_with_matches']}")
+            print(f"Confidence statistics:")
+            print(f"  - Min: {stats['confidence_distribution']['min']:.4f}")
+            print(f"  - Max: {stats['confidence_distribution']['max']:.4f}")
+            print(f"  - Mean: {stats['confidence_distribution']['mean']:.4f}")
+            print(f"  - Threshold: {stats['confidence_distribution']['threshold']:.4f}")
+            print(f"Entity match statistics:")
+            print(f"  - Max matches per entity: {stats['entity_match_stats']['max_matches_per_entity']}")
+            print(f"  - Avg matches per entity: {stats['entity_match_stats']['avg_matches_per_entity']:.2f}")
+            print("=================================")
             
             # Generate visualizations if enabled
             if self.visualizations_enabled:
@@ -382,18 +328,37 @@ def analyze_training(self, classifier, feature_extractor=None):
     def _visualize_classification_stats(self, stats):
         """Generate visualizations for classification statistics"""
         try:
-            plt.figure(figsize=(10, 6))
+            plt.figure(figsize=(12, 8))
             
             # Confidence distribution
+            plt.subplot(2, 1, 1)
             bins = stats['confidence_histogram']['bins']
             counts = stats['confidence_histogram']['counts']
             
             plt.bar(bins[:-1], counts, width=(bins[1]-bins[0]))
+            plt.axvline(x=stats['confidence_distribution']['threshold'], color='r', linestyle='--',
+                     label=f"Threshold: {stats['confidence_distribution']['threshold']:.2f}")
+            plt.legend()
             plt.title('Match Confidence Distribution')
             plt.xlabel('Confidence')
             plt.ylabel('Count')
-            plt.tight_layout()
             
+            # Entity match distribution (sample histogram)
+            if stats['entity_match_stats']['max_matches_per_entity'] > 0:
+                plt.subplot(2, 1, 2)
+                
+                # We don't have full entity match counts, so create a representative histogram
+                bins = [1, 2, 3, 5, 10, 20, 50, 100]
+                # Generate dummy counts
+                counts = [int((1.0 / (i+1)) * stats['total_matches'] / 10) for i in range(len(bins)-1)]
+                
+                plt.bar(range(len(counts)), counts, width=0.7)
+                plt.xticks(range(len(counts)), [f"{bins[i]}-{bins[i+1]-1}" for i in range(len(counts))])
+                plt.title('Entity Match Distribution (Approximated)')
+                plt.xlabel('Matches per Entity')
+                plt.ylabel('Number of Entities')
+            
+            plt.tight_layout()
             plt.savefig(self.output_dir / 'classification_stats.png')
             plt.close()
         

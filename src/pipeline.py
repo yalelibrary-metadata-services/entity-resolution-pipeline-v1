@@ -1,5 +1,6 @@
 """
 Pipeline orchestration module for entity resolution
+Optimized version with batch processing and parallel feature extraction
 """
 
 import os
@@ -13,12 +14,18 @@ from .preprocessing import Preprocessor
 from .embedding import Embedder
 from .indexing import Indexer
 from .imputation import Imputer
-from .querying import QueryEngine
-from .features import FeatureExtractor
 from .classification import Classifier
 from .clustering import Clusterer
 from .reporting import Reporter
 from .analysis import Analyzer
+
+# Import optimized components
+from .optimized_query import OptimizedQueryEngine
+from .batch_processor import BatchProcessor
+from .parallel_features import ParallelFeatureExtractor
+from .utils_enhancement import monitor_memory_usage
+
+# Import original utilities
 from .utils import Timer, ensure_dir, load_checkpoint, save_checkpoint
 
 # Configure logger
@@ -38,32 +45,40 @@ class Pipeline:
         ensure_dir(self.checkpoint_dir)
         ensure_dir(self.output_dir)
         
-        # Initialize pipeline components
+        # Initialize original pipeline components
         self.preprocessor = Preprocessor(config)
         self.embedder = Embedder(config)
         self.indexer = Indexer(config)
         self.imputer = Imputer(config)
-        self.query_engine = QueryEngine(config)
-        self.feature_extractor = FeatureExtractor(config)
         self.classifier = Classifier(config)
         self.clusterer = Clusterer(config)
         self.reporter = Reporter(config)
         self.analyzer = Analyzer(config)
         
-        logger.info(f"Pipeline initialized in {self.mode} mode")
+        # Initialize optimized components
+        self.query_engine = OptimizedQueryEngine(config)
+        self.feature_extractor = ParallelFeatureExtractor(config)
+        self.batch_processor = BatchProcessor(config)
+        
+        logger.info(f"Optimized pipeline initialized in {self.mode} mode")
     
     def run_all(self, reset=False):
         """Run the complete pipeline"""
-        with Timer() as timer:
-            self.run_preprocessing(reset=reset)
-            self.run_embedding(reset=reset)
-            self.run_indexing(reset=reset)
-            self.run_training(reset=reset)
-            self.run_classification(reset=reset)
-            self.run_clustering(reset=reset)
-            self.run_reporting()
-        
-        logger.info(f"Complete pipeline executed in {timer.elapsed:.2f} seconds")
+        try:
+            with Timer() as timer:
+                self.run_preprocessing(reset=reset)
+                self.run_embedding(reset=reset)
+                self.run_indexing(reset=reset)
+                self.run_training(reset=reset)
+                self.run_classification(reset=reset)
+                self.run_clustering(reset=reset)
+                self.run_reporting()
+            
+            logger.info(f"Complete pipeline executed in {timer.elapsed:.2f} seconds")
+        finally:
+            # Ensure Weaviate connection is closed
+            if hasattr(self, 'query_engine') and hasattr(self.query_engine, 'close'):
+                self.query_engine.close()
     
     def run_preprocessing(self, reset=False):
         """Run the preprocessing stage"""
@@ -134,9 +149,8 @@ class Pipeline:
         # Run analysis on indexing results
         self.analyzer.analyze_indexing(self.indexer)
     
-    # Add these lines at the top of src/pipeline.py in the run_training method
     def run_training(self, reset=False):
-        """Run the training stage for classification"""
+        """Run the training stage for classification with optimized processing"""
         with Timer() as timer:
             checkpoint_path = self.checkpoint_dir / "training.pkl"
             
@@ -148,54 +162,61 @@ class Pipeline:
                 training_data = load_checkpoint(checkpoint_path)
                 self.classifier.load_state(training_data)
             else:
-                print("Running classifier training from scratch")
-                logger.info("Running classifier training")
+                print("Running classifier training with optimized batch processing")
+                logger.info("Running classifier training with optimized batch processing")
                 
                 # Ensure indexing is complete
                 if not self.indexer.is_indexed():
                     print("Indexing not complete, running indexing first")
                     self.run_indexing()
                 
-                # Set collection in query engine
-                print("Setting collection in query engine")
+                # Set collection in optimized query engine
+                print("Setting collection in optimized query engine")
                 self.query_engine.set_collection(self.indexer.get_collection())
                 
                 # Load ground truth data
                 print("Loading ground truth data")
                 ground_truth_file = self.config['dataset']['ground_truth_file']
                 record_pairs, labels = self.preprocessor.load_ground_truth(ground_truth_file)
+                print(f"Loaded {len(record_pairs)} labeled pairs: {sum(labels)} positive, {len(labels) - sum(labels)} negative")
                 
-                # Extract features for training
-                print(f"Starting feature extraction for {len(record_pairs)} record pairs")
-                feature_vectors = []
-                
-                # Use tqdm for feature extraction progress
-                from tqdm import tqdm
-                for i, (left_id, right_id) in enumerate(tqdm(record_pairs, desc="Extracting features")):
-                    # Print periodic progress updates
-                    if i % 1000 == 0:
-                        print(f"Processed {i}/{len(record_pairs)} pairs")
-                    
-                    # Get record data
+                # Prepare record pairs
+                prepared_pairs = []
+                for left_id, right_id in record_pairs:
                     left_record = self.preprocessor.get_record(left_id)
                     right_record = self.preprocessor.get_record(right_id)
-                    
-                    # Impute missing values if necessary
-                    if self.config['imputation']['enabled']:
-                        left_record = self.imputer.impute_record(left_record, self.query_engine, self.preprocessor)
-                        right_record = self.imputer.impute_record(right_record, self.query_engine, self.preprocessor)
-                    
-                    # Extract features
-                    feature_vector = self.feature_extractor.extract_features(
-                        left_record, right_record, self.query_engine
+                    if left_record and right_record:
+                        prepared_pairs.append((left_record, right_record))
+                    else:
+                        logger.warning(f"Skipping pair with missing records: {left_id}, {right_id}")
+                
+                print(f"Prepared {len(prepared_pairs)} valid record pairs for feature extraction")
+                
+                # Extract features using batch processor with memory monitoring
+                monitor_enabled = self.config.get('batch_processing', {}).get('monitor_memory', False)
+                if monitor_enabled:
+                    print("Memory monitoring enabled during processing")
+                    interval = self.config.get('batch_processing', {}).get('monitoring_interval', 30)
+                    memory_context = monitor_memory_usage(interval)
+                else:
+                    # Create a no-op context manager
+                    from contextlib import nullcontext
+                    memory_context = nullcontext()
+                
+                with memory_context:
+                    print("Starting optimized batch feature extraction")
+                    feature_vectors = self.batch_processor.process_record_pairs(
+                        prepared_pairs,
+                        self.preprocessor,
+                        self.query_engine,
+                        self.feature_extractor
                     )
-                    feature_vectors.append(feature_vector)
                 
                 print(f"Feature extraction complete: {len(feature_vectors)} vectors")
                 
-                # Convert to numpy array for RFE
+                # Convert to numpy array for training
                 X = np.array(feature_vectors)
-                y = np.array(labels)
+                y = np.array(labels[:len(feature_vectors)])  # Match labels to feature vectors
                 
                 print(f"Feature matrix shape: {X.shape}")
                 
@@ -211,51 +232,86 @@ class Pipeline:
                         print(f"Using {X.shape[1]} features selected by RFE")
                         logger.info(f"Using {X.shape[1]} features selected by RFE")
                 
-                # Get feature names (which will be filtered by RFE if enabled)
-                feature_names = self.feature_extractor.get_feature_names()
-                
                 # Train classifier
                 print("Starting classifier training")
-                self.classifier.train(X, labels, feature_names)
+                self.classifier.train(X, y, self.feature_extractor.get_feature_names())
                 
                 print("Saving checkpoint")
                 save_checkpoint(checkpoint_path, self.classifier.get_state())
                 
-            print("=== TRAINING STAGE COMPLETED ===")
+                # Clear caches to free memory
+                self.feature_extractor.clear_caches()
+                self.query_engine.clear_cache()
+            
+            print("=== TRAINING STAGE COMPLETED ===\n")
         
         logger.info(f"Training completed in {timer.elapsed:.2f} seconds")
     
     def run_classification(self, reset=False):
-        """Run the classification stage"""
+        """Run the classification stage with optimized batch processing"""
         with Timer() as timer:
             checkpoint_path = self.checkpoint_dir / "classification.pkl"
             
+            print("\n=== STARTING CLASSIFICATION STAGE ===")
+            
             if not reset and checkpoint_path.exists():
+                print("Loading classification results from checkpoint")
                 logger.info("Loading classification results from checkpoint")
                 classification_data = load_checkpoint(checkpoint_path)
                 self.classifier.load_classification_results(classification_data)
             else:
-                logger.info("Running classification")
+                print("Running classification with optimized batch processing")
+                logger.info("Running classification with optimized batch processing")
+                
                 # Ensure classifier is trained
                 if not self.classifier.is_trained():
+                    print("Classifier not trained, running training first")
                     self.run_training()
                 
                 # Ensure query engine has collection set
                 if self.query_engine.collection is None:
+                    print("Setting collection in optimized query engine")
                     self.query_engine.set_collection(self.indexer.get_collection())
                 
                 # Get all personIds
                 person_ids = self.preprocessor.get_all_person_ids()
+                print(f"Classifying {len(person_ids)} entities")
                 
-                # Process classification
-                self.classifier.classify_dataset(
-                    person_ids,
-                    self.preprocessor,
-                    self.query_engine,
-                    self.feature_extractor,
-                    self.imputer
-                )
+                # Enable memory monitoring if configured
+                monitor_enabled = self.config.get('batch_processing', {}).get('monitor_memory', False)
+                if monitor_enabled:
+                    print("Memory monitoring enabled during processing")
+                    interval = self.config.get('batch_processing', {}).get('monitoring_interval', 30)
+                    memory_context = monitor_memory_usage(interval)
+                else:
+                    # Create a no-op context manager
+                    from contextlib import nullcontext
+                    memory_context = nullcontext()
+                
+                # Process classification with memory monitoring
+                with memory_context:
+                    print("Starting batch classification")
+                    results = self.batch_processor.classify_dataset(
+                        person_ids,
+                        self.preprocessor,
+                        self.query_engine,
+                        self.feature_extractor,
+                        self.classifier
+                    )
+                
+                # Store match pairs
+                self.classifier.match_pairs = results['match_pairs']
+                print(f"Classification complete: found {len(results['match_pairs'])} matches")
+                
+                # Save checkpoint
+                print("Saving classification results checkpoint")
                 save_checkpoint(checkpoint_path, self.classifier.get_classification_results())
+                
+                # Clear caches to free memory
+                self.feature_extractor.clear_caches()
+                self.query_engine.clear_cache()
+            
+            print("=== CLASSIFICATION STAGE COMPLETED ===\n")
         
         logger.info(f"Classification completed in {timer.elapsed:.2f} seconds")
         
@@ -267,24 +323,37 @@ class Pipeline:
         with Timer() as timer:
             checkpoint_path = self.checkpoint_dir / "clustering.pkl"
             
+            print("\n=== STARTING CLUSTERING STAGE ===")
+            
             if not reset and checkpoint_path.exists():
+                print("Loading clustering results from checkpoint")
                 logger.info("Loading clustering results from checkpoint")
                 clustering_data = load_checkpoint(checkpoint_path)
                 self.clusterer.load_state(clustering_data)
             else:
+                print("Running clustering")
                 logger.info("Running clustering")
+                
                 # Ensure classification is complete
                 if not self.classifier.has_classification_results():
+                    print("Classification not complete, running classification first")
                     self.run_classification()
                 
                 # Process clustering
                 match_pairs = self.classifier.get_match_pairs()
+                print(f"Clustering {len(match_pairs)} match pairs")
                 self.clusterer.cluster(match_pairs)
+                
+                # Save checkpoint
+                print("Saving clustering results checkpoint")
                 save_checkpoint(checkpoint_path, self.clusterer.get_state())
                 
                 # Save final clustering results
                 output_path = self.output_dir / "entity_clusters.jsonl"
                 self.clusterer.save_clusters(output_path)
+                print(f"Saved {len(self.clusterer.get_clusters())} clusters to {output_path}")
+            
+            print("=== CLUSTERING STAGE COMPLETED ===\n")
         
         logger.info(f"Clustering completed in {timer.elapsed:.2f} seconds")
         
@@ -295,12 +364,15 @@ class Pipeline:
         """Run the reporting stage"""
         with Timer() as timer:
             logger.info("Generating reports")
+            print("\n=== STARTING REPORTING STAGE ===")
             
             # Ensure all previous stages are complete
             if not self.clusterer.is_clustered():
+                print("Clustering not complete, running clustering first")
                 self.run_clustering()
             
             # Generate reports
+            print("Generating analysis reports and visualizations")
             self.reporter.generate_reports(
                 self.preprocessor,
                 self.embedder,
@@ -309,5 +381,28 @@ class Pipeline:
                 self.clusterer,
                 self.output_dir
             )
+            
+            print("=== REPORTING STAGE COMPLETED ===\n")
         
         logger.info(f"Reporting completed in {timer.elapsed:.2f} seconds")
+        
+        # Print performance statistics
+        batch_stats = self.batch_processor.get_statistics()
+        cache_stats = self.query_engine.get_cache_stats() if hasattr(self.query_engine, 'get_cache_stats') else None
+        
+        print("\n=== PERFORMANCE STATISTICS ===")
+        print(f"Batch Processing:")
+        print(f"  - Processed batches: {batch_stats['processed_batches']}")
+        print(f"  - Processed items: {batch_stats['processed_items']}")
+        print(f"  - Items per second: {batch_stats['items_per_second']:.2f}")
+        print(f"  - Total processing time: {batch_stats['total_processing_time']:.2f} seconds")
+        
+        if cache_stats:
+            print("\nCache Statistics:")
+            print(f"  - Hits: {sum(cache_stats['hits'].values())}")
+            print(f"  - Misses: {sum(cache_stats['misses'].values())}")
+            if sum(cache_stats['hits'].values()) + sum(cache_stats['misses'].values()) > 0:
+                hit_rate = sum(cache_stats['hits'].values()) / (sum(cache_stats['hits'].values()) + sum(cache_stats['misses'].values()))
+                print(f"  - Hit rate: {hit_rate:.2%}")
+        
+        print("=================================\n")
