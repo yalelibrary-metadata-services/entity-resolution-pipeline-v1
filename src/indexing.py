@@ -153,30 +153,20 @@ class Indexer:
             with collection.batch.dynamic() as batch:
                 for i, obj in enumerate(tqdm(objects_to_index, desc="Indexing objects")):
                     # Generate a deterministic UUID from the hash and field type
+                    # This ensures idempotency - same object will always have the same UUID
                     obj_uuid = generate_uuid5(f"{obj['hash']}_{obj['field_type']}")
                     
-                    # Add object to batch
-                    if self.upsert_mode:
-                        batch.add_object(
-                            properties={
-                                "text": obj["text"],
-                                "hash": obj["hash"],
-                                "frequency": obj["frequency"],
-                                "field_type": obj["field_type"],
-                            },
-                            vector={"text_vector": obj["vector"].tolist()},
-                            uuid=obj_uuid
-                        )
-                    else:
-                        batch.add_object(
-                            properties={
-                                "text": obj["text"],
-                                "hash": obj["hash"],
-                                "frequency": obj["frequency"],
-                                "field_type": obj["field_type"],
-                            },
-                            vector={"text_vector": obj["vector"].tolist()},
-                        )
+                    # Always use deterministic UUIDs to ensure idempotency
+                    batch.add_object(
+                        properties={
+                            "text": obj["text"],
+                            "hash": obj["hash"],
+                            "frequency": obj["frequency"],
+                            "field_type": obj["field_type"],
+                        },
+                        vector={"text_vector": obj["vector"].tolist()},
+                        uuid=obj_uuid
+                    )
                     
                     indexed_count += 1
                     

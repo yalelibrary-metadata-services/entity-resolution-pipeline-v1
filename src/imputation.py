@@ -5,7 +5,9 @@ Handles null value imputation using vector-based hot deck approach
 
 import logging
 import numpy as np
+import hashlib
 from weaviate.classes.query import Filter, MetadataQuery
+from weaviate.util import generate_uuid5  # Add this import
 from tqdm import tqdm
 
 from .utils import Timer
@@ -27,10 +29,13 @@ class Imputer:
         # Fields to impute
         self.fields_to_impute = config['fields']['impute']
         
+        # Hash algorithm for computing new hashes
+        self.hash_algorithm = config['preprocessing']['hash_algorithm']
+        
         # Cache for imputed values
         self.imputed_values_cache = {}
     
-    def impute_record(self, record, query_engine=None):
+    def impute_record(self, record, query_engine=None, preprocessor=None):
         """Impute missing values in a record"""
         if not self.enabled or query_engine is None:
             return record
@@ -50,11 +55,11 @@ class Imputer:
                     continue
                 
                 # Need to impute
-                imputed_value = self._impute_field(record, field, query_engine)
-                if imputed_value:
-                    imputed_record[field] = imputed_value
+                imputed_hash = self._impute_field(record, field, query_engine, preprocessor)
+                if imputed_hash:
+                    imputed_record[field] = imputed_hash
                     # Cache the imputed value
-                    self.imputed_values_cache[cache_key] = imputed_value
+                    self.imputed_values_cache[cache_key] = imputed_hash
         
         return imputed_record
     
@@ -69,7 +74,7 @@ class Imputer:
             # Fallback to concatenating all field values
             return "_".join(str(v) for v in record.values())
     
-    def _impute_field(self, record, field_to_impute, query_engine):
+    def _impute_field(self, record, field_to_impute, query_engine, preprocessor=None):
         """Impute a specific field using vector-based hot deck approach"""
         try:
             # Use composite field for imputation if available
@@ -90,15 +95,22 @@ class Imputer:
                     min_similarity=self.min_similarity
                 )
                 
-                if not results:
+                if not results or len(results.objects) == 0:
                     logger.debug(f"No results found for imputing {field_to_impute}")
                     return None
+                
+                # *** REQUIREMENT: Retrieve the string value for the first match ***
+                first_match = results.objects[0]
+                first_match_string = first_match.properties.get('text', '')
+                
+                # *** REQUIREMENT: Compute hash for this string ***
+                imputed_hash = self._compute_hash(first_match_string)
                 
                 # Calculate weighted average vector based on similarity
                 weights = []
                 vectors = []
                 
-                for i, result in enumerate(results):
+                for i, result in enumerate(results.objects):
                     similarity = 1.0 - result.metadata.distance  # Convert distance to similarity
                     weight = similarity * (self.similarity_weight_decay ** i)  # Apply decay
                     weights.append(weight)
@@ -120,14 +132,29 @@ class Imputer:
                 for i, vec in enumerate(vectors):
                     weighted_vector += weights[i] * vec
                 
-                # Find the most similar existing hash for this field
-                most_similar_hash = query_engine.find_most_similar_hash(
-                    weighted_vector,
-                    field_type=field_to_impute
+                # *** REQUIREMENT: Store the computed vector in Weaviate with the hash ***
+                self._persist_imputed_vector(
+                    imputed_hash, 
+                    field_to_impute, 
+                    first_match_string, 
+                    weighted_vector, 
+                    query_engine
                 )
                 
-                if most_similar_hash:
-                    return most_similar_hash
+                # *** REQUIREMENT: Update hash mapping if preprocessor is available ***
+                if preprocessor is not None:
+                    record_id = record.get('personId')
+                    if record_id:
+                        # Update the record's field hash
+                        if record_id in preprocessor.record_field_hashes:
+                            preprocessor.record_field_hashes[record_id][field_to_impute] = imputed_hash
+                        
+                        # Update field hash mapping
+                        if imputed_hash not in preprocessor.field_hash_mapping:
+                            preprocessor.field_hash_mapping[imputed_hash] = {}
+                        preprocessor.field_hash_mapping[imputed_hash][field_to_impute] = 1
+                
+                return imputed_hash
             
             return None
         
@@ -135,13 +162,53 @@ class Imputer:
             logger.error(f"Error during imputation: {e}")
             return None
     
-    def batch_impute(self, records, query_engine):
+    def _compute_hash(self, value):
+        """Compute hash for a string value"""
+        if self.hash_algorithm == 'md5':
+            return hashlib.md5(value.encode('utf-8')).hexdigest()
+        elif self.hash_algorithm == 'sha1':
+            return hashlib.sha1(value.encode('utf-8')).hexdigest()
+        else:
+            raise ValueError(f"Unsupported hash algorithm: {self.hash_algorithm}")
+    
+    def _persist_imputed_vector(self, hash_val, field_type, text_value, vector, query_engine):
+        """Persist the imputed vector in Weaviate"""
+        try:
+            # Get the collection
+            collection = query_engine.collection
+            
+            # Generate deterministic UUID for this hash and field type
+            obj_uuid = generate_uuid5(f"{hash_val}_{field_type}")
+            
+            # Default frequency for imputed values
+            frequency = 1
+            
+            # Upsert the imputed vector
+            collection.data.insert(
+                properties={
+                    "text": text_value,
+                    "hash": hash_val,
+                    "frequency": frequency,
+                    "field_type": field_type,
+                },
+                vector={"text_vector": vector.tolist()},
+                uuid=obj_uuid
+            )
+            
+            logger.debug(f"Persisted imputed vector for {hash_val} in field {field_type}")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error persisting imputed vector: {e}")
+            return False
+    
+    def batch_impute(self, records, query_engine, preprocessor=None):
         """Impute missing values for a batch of records"""
         if not self.enabled or query_engine is None:
             return records
         
         imputed_records = {}
         for record_id, record in tqdm(records.items(), desc="Imputing records"):
-            imputed_records[record_id] = self.impute_record(record, query_engine)
+            imputed_records[record_id] = self.impute_record(record, query_engine, preprocessor)
         
         return imputed_records

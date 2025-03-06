@@ -5,6 +5,7 @@ Pipeline orchestration module for entity resolution
 import os
 import logging
 import time
+import numpy as np
 from pathlib import Path
 
 # Import pipeline modules
@@ -164,8 +165,9 @@ class Pipeline:
                     
                     # Impute missing values if necessary
                     if self.config['imputation']['enabled']:
-                        left_record = self.imputer.impute_record(left_record, self.query_engine)
-                        right_record = self.imputer.impute_record(right_record, self.query_engine)
+                        # In pipeline.py, modify the imputation calls
+                        left_record = self.imputer.impute_record(left_record, self.query_engine, self.preprocessor)
+                        right_record = self.imputer.impute_record(right_record, self.query_engine, self.preprocessor)
                     
                     # Extract features
                     feature_vector = self.feature_extractor.extract_features(
