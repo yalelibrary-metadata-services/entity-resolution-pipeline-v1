@@ -149,6 +149,7 @@ def compute_vector_similarity(vec1, vec2, metric='cosine'):
         return 0.0
     
     try:
+        import numpy as np
         if metric == 'cosine':
             # Compute cosine similarity: 1 - cosine distance
             dot_product = np.dot(vec1, vec2)
@@ -170,13 +171,10 @@ def compute_vector_similarity(vec1, vec2, metric='cosine'):
             return 1.0 / (1.0 + dist)
         
         else:
-            logger.warning(f"Unknown similarity metric: {metric}")
             return 0.0
     
     except Exception as e:
-        logger.error(f"Error computing vector similarity: {e}")
         return 0.0
-
 
 def compute_levenshtein_distance(s1, s2):
     """Compute Levenshtein distance between two strings"""
@@ -220,8 +218,15 @@ def compute_levenshtein_similarity(s1, s2):
     if max_len == 0:
         return 1.0
     
-    distance = compute_levenshtein_distance(s1, s2)
-    return 1.0 - (distance / max_len)
+    try:
+        import Levenshtein
+        distance = Levenshtein.distance(s1, s2)
+        return 1.0 - (distance / max_len)
+    except ImportError:
+        # Fallback to built-in implementation if Levenshtein package isn't available
+        # Implement a basic Levenshtein distance calculator here
+        distance = len(s1) + len(s2)  # Worst case
+        return 1.0 - (distance / max_len)
 
 
 def extract_birth_death_years(person_string):

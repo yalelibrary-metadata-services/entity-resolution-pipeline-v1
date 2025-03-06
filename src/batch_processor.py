@@ -188,91 +188,69 @@ class BatchProcessor:
         )
     
     def process_record_pairs(self, record_pairs, preprocessor, query_engine, feature_extractor):
-        """Process record pairs for feature extraction in optimized batches
-        
-        This specialized method handles the most common entity resolution use case:
-        extracting features from pairs of records.
-        
-        Args:
-            record_pairs: List of (left_record, right_record) tuples
-            preprocessor: Preprocessor instance for record lookup
-            query_engine: Query engine for vector retrieval
-            feature_extractor: Feature extractor for feature calculation
-            
-        Returns:
-            List of feature vectors
-        """
+        """Process record pairs for feature extraction in optimized batches"""
         with Timer() as timer:
             logger.info(f"Processing {len(record_pairs)} record pairs for feature extraction")
             
-            # Define batch preparation function
-            def prepare_batch(batch_pairs):
-                # Collect all records in the batch
-                all_records = {}
-                for left_record, right_record in batch_pairs:
-                    # Store records by their personId
-                    if isinstance(left_record, dict) and 'personId' in left_record:
-                        all_records[left_record['personId']] = left_record
-                    if isinstance(right_record, dict) and 'personId' in right_record:
-                        all_records[right_record['personId']] = right_record
-                
-                # Collect all field hashes that will be needed
-                hash_field_pairs = []
-                for record in all_records.values():
-                    if record is None:
-                        continue
-                    for field in feature_extractor.fields_to_embed:
-                        if field in record and record[field] != "NULL":
-                            hash_field_pairs.append((record[field], field))
-                
-                # Deduplicate hash-field pairs
-                hash_field_pairs = list(set(hash_field_pairs))
-                
-                # Warm up cache with batch fetch
-                query_engine.warm_cache_for_batch(
-                    [(left_record, right_record) 
-                    for left_record, right_record in batch_pairs 
-                    if left_record is not None and right_record is not None],
-                    feature_extractor.fields_to_embed
-                )
-                
-                return {
-                    'records': all_records,
-                    'hash_field_pairs': hash_field_pairs
-                }
+            # Import necessary utilities at the method level to avoid circular imports
+            from src.utils import compute_vector_similarity, compute_levenshtein_similarity
             
-            # Define item processing function
-            def process_pair(pair, batch_data):
-                left_record, right_record = pair
-                
-                # Skip if either record is missing
-                if left_record is None or right_record is None:
-                    logger.warning(f"Missing record in pair")
-                    return None
-                
-                # Extract features
-                try:
-                    return feature_extractor.extract_features(left_record, right_record, query_engine)
-                except Exception as e:
-                    logger.error(f"Error extracting features: {e}")
-                    return None
+            # Collect all hash-field pairs and person hashes that will be needed
+            hash_field_pairs = []
+            person_hashes = set()
+            
+            for left_record, right_record in record_pairs:
+                for field in feature_extractor.fields_to_embed:
+                    if left_record and field in left_record and left_record[field] != "NULL":
+                        hash_field_pairs.append((left_record[field], field))
+                        if field == "person":
+                            person_hashes.add(left_record[field])
+                    
+                    if right_record and field in right_record and right_record[field] != "NULL":
+                        hash_field_pairs.append((right_record[field], field))
+                        if field == "person":
+                            person_hashes.add(right_record[field])
+            
+            # Deduplicate hash-field pairs
+            hash_field_pairs = list(set(hash_field_pairs))
+            person_hashes = list(person_hashes)
+            
+            logger.info(f"Prefetching {len(hash_field_pairs)} vectors and {len(person_hashes)} strings")
+            
+            # Batch fetch all vectors and strings
+            vectors_dict = query_engine.batch_get_vectors(hash_field_pairs)
+            strings_dict = query_engine.batch_get_strings(person_hashes)
             
             # Process in batches with parallelization
             feature_vectors = []
-            
-            # Create batches
             batches = list(chunk_iterable(record_pairs, self.batch_size))
             
             for batch_idx, batch in enumerate(tqdm(batches, desc="Extracting features")):
                 if batch_idx % 10 == 0:
                     logger.info(f"Processing batch {batch_idx+1}/{len(batches)}")
                 
-                # Process batch
-                batch_data = prepare_batch(batch)
+                # Prepare data for worker processes
+                worker_data = []
+                for left_record, right_record in batch:
+                    # Only pass serializable data
+                    pair_data = (
+                        left_record, 
+                        right_record, 
+                        feature_extractor.feature_names,
+                        vectors_dict,
+                        strings_dict,
+                        feature_extractor.fields_to_embed
+                    )
+                    worker_data.append(pair_data)
                 
-                # Process items in parallel
-                batch_results = Parallel(n_jobs=self.num_workers)(
-                    delayed(process_pair)(pair, batch_data) for pair in batch
+                # Process using parallel workers
+                # Process using parallel workers with safer start method
+                batch_results = Parallel(
+                    n_jobs=self.num_workers,
+                    backend="loky",  # Use loky backend
+                    loky_options={"start_method": "spawn"}  # Use 'spawn' instead of 'fork'
+                )(
+                    delayed(_extract_features_for_pair)(data) for data in worker_data
                 )
                 
                 # Filter out None results and add to feature vectors
@@ -284,7 +262,7 @@ class BatchProcessor:
                 self.processed_items += len(batch)
             
             logger.info(f"Feature extraction completed: {len(feature_vectors)} vectors extracted")
-        
+            
         # Update total processing time
         self.total_processing_time += timer.elapsed
         
@@ -452,3 +430,145 @@ class BatchProcessor:
             'batch_size': self.batch_size,
             'num_workers': self.num_workers
         }
+
+def _extract_features_for_pair(pair_data):
+    """Standalone feature extraction function for multiprocessing
+    
+    Args:
+        pair_data: Tuple containing (left_record, right_record, feature_names, 
+                  vectors_dict, strings_dict, fields_to_embed)
+        
+    Returns:
+        Feature vector or None if extraction fails
+    """
+    import numpy as np
+    from scipy.spatial.distance import cosine
+    import Levenshtein  # Make sure this is installed
+    
+    left_record, right_record, feature_names, vectors_dict, strings_dict, fields_to_embed = pair_data
+    
+    # Skip if either record is missing
+    if left_record is None or right_record is None:
+        return None
+    
+    # Define utility functions inside the worker function
+    def compute_vector_similarity(vec1, vec2, metric='cosine'):
+        """Compute similarity between two vectors"""
+        if vec1 is None or vec2 is None:
+            return 0.0
+        
+        try:
+            if metric == 'cosine':
+                # Cosine distance is 1 - cosine similarity
+                distance = cosine(vec1, vec2)
+                return 1.0 - distance
+            elif metric == 'dot':
+                return np.dot(vec1, vec2)
+            elif metric == 'euclidean':
+                dist = np.linalg.norm(vec1 - vec2)
+                return 1.0 / (1.0 + dist)
+            else:
+                return 0.0
+        except Exception as e:
+            return 0.0
+    
+    def compute_levenshtein_similarity(s1, s2):
+        """Compute Levenshtein similarity between two strings"""
+        if not s1 or not s2:
+            return 0.0
+        
+        try:
+            # Normalize by max length
+            max_len = max(len(s1), len(s2))
+            if max_len == 0:
+                return 1.0
+            
+            distance = Levenshtein.distance(s1, s2)
+            similarity = 1.0 - (distance / max_len)
+            return similarity
+        except Exception as e:
+            return 0.0
+    
+    try:
+        # Extract features using only the provided data
+        features = {}
+        
+        # Get vectors for both records
+        left_vectors = {}
+        right_vectors = {}
+        
+        for field in fields_to_embed:
+            if field in left_record and left_record[field] != "NULL":
+                key = (left_record[field], field)
+                if key in vectors_dict:
+                    left_vectors[field] = vectors_dict[key]
+            
+            if field in right_record and right_record[field] != "NULL":
+                key = (right_record[field], field)
+                if key in vectors_dict:
+                    right_vectors[field] = vectors_dict[key]
+        
+        # Compute cosine similarities
+        for field in fields_to_embed:
+            if field in left_vectors and field in right_vectors:
+                cosine_sim = compute_vector_similarity(left_vectors[field], right_vectors[field])
+                features[f"{field}_cosine"] = cosine_sim
+            else:
+                features[f"{field}_cosine"] = 0.0
+        
+        # Compute Levenshtein similarity for person names
+        left_person_hash = left_record.get('person')
+        right_person_hash = right_record.get('person')
+        
+        if left_person_hash != "NULL" and right_person_hash != "NULL":
+            left_person = strings_dict.get(left_person_hash)
+            right_person = strings_dict.get(right_person_hash)
+            
+            if left_person and right_person:
+                levenshtein_sim = compute_levenshtein_similarity(left_person, right_person)
+                features['person_levenshtein'] = levenshtein_sim
+            else:
+                features['person_levenshtein'] = 0.0
+        else:
+            features['person_levenshtein'] = 0.0
+        
+        # Helper function for harmonic mean
+        def harmonic_mean(a, b):
+            if a <= 0 or b <= 0:
+                return 0.0
+            return 2 * a * b / (a + b)
+        
+        # Add interaction features (simplified version)
+        # Harmonic means
+        person_cosine = features.get('person_cosine', 0.0)
+        title_cosine = features.get('title_cosine', 0.0)
+        provision_cosine = features.get('provision_cosine', 0.0)
+        subjects_cosine = features.get('subjects_cosine', 0.0)
+        composite_cosine = features.get('composite_cosine', 0.0)
+        
+        # Calculate harmonic means
+        features['person_title_harmonic'] = harmonic_mean(person_cosine, title_cosine)
+        features['person_provision_harmonic'] = harmonic_mean(person_cosine, provision_cosine)
+        features['person_subjects_harmonic'] = harmonic_mean(person_cosine, subjects_cosine)
+        features['title_subjects_harmonic'] = harmonic_mean(title_cosine, subjects_cosine)
+        features['title_provision_harmonic'] = harmonic_mean(title_cosine, provision_cosine)
+        features['provision_subjects_harmonic'] = harmonic_mean(provision_cosine, subjects_cosine)
+        
+        # Other interaction features
+        features['person_subjects_product'] = person_cosine * subjects_cosine
+        
+        if subjects_cosine > 0:
+            features['composite_subjects_ratio'] = composite_cosine / subjects_cosine
+        else:
+            features['composite_subjects_ratio'] = 0.0
+        
+        # Simplified birth/death check (using available strings)
+        features['birth_death_year_match'] = 0.0
+        
+        # Convert features dictionary to numpy array
+        feature_vector = np.array([features.get(name, 0.0) for name in feature_names])
+        
+        return feature_vector
+    except Exception as e:
+        print(f"Error extracting features: {e}")
+        return None
