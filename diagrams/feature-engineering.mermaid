@@ -1,0 +1,66 @@
+flowchart TD
+    subgraph "Record Pair"
+        A["Record 1 (personId1)"] --- B["Record 2 (personId2)"]
+    end
+    
+    subgraph "Vector Retrieval"
+        C["Query person vectors"] --> D["Query title vectors"]
+        D --> E["Query provision vectors"]
+        E --> F["Query subjects vectors"]
+        F --> G["Query composite vectors"]
+    end
+    
+    subgraph "Direct Similarity Features"
+        H["Cosine Similarities"] --> H1["person_cosine"]
+        H --> H2["title_cosine"]
+        H --> H3["provision_cosine"]
+        H --> H4["subjects_cosine"]
+        H --> H5["composite_cosine"]
+        
+        I["Levenshtein Similarity"] --> I1["person_levenshtein"]
+    end
+    
+    subgraph "Interaction Features"
+        J["Harmonic Means"] --> J1["person_title_harmonic"]
+        J --> J2["person_provision_harmonic"]
+        J --> J3["person_subjects_harmonic"]
+        J --> J4["title_subjects_harmonic"]
+        J --> J5["title_provision_harmonic"]
+        J --> J6["provision_subjects_harmonic"]
+        
+        K["Other Interactions"] --> K1["person_subjects_product"]
+        K --> K2["composite_subjects_ratio"]
+    end
+    
+    subgraph "Special Features"
+        L["Temporal Analysis"] --> L1["birth_death_year_match"]
+    end
+    
+    subgraph "Feature Vector Assembly"
+        M["Normalize Features"] --> N["Final Feature Vector"]
+    end
+    
+    A --> C
+    B --> C
+    G --> H
+    A --> I
+    B --> I
+    H --> J
+    H --> K
+    A --> L
+    B --> L
+    H1 --> M
+    H2 --> M
+    H3 --> M
+    H4 --> M
+    H5 --> M
+    I1 --> M
+    J1 --> M
+    J2 --> M
+    J3 --> M
+    J4 --> M
+    J5 --> M
+    J6 --> M
+    K1 --> M
+    K2 --> M
+    L1 --> M

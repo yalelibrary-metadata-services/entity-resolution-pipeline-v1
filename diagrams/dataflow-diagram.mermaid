@@ -1,0 +1,57 @@
+flowchart TD
+    subgraph Input
+        A[CSV Files] --> |600+ files| B[Ground Truth Data]
+    end
+
+    subgraph Preprocessing
+        C[Preprocessor] --> |Extract Fields| D[Unique Strings]
+        C --> |Track Frequency| E[String Counts]
+        C --> |Map Records| F[Record Field Hashes]
+        C --> |Field Mapping| G[Field Hash Mapping]
+    end
+    
+    subgraph "Vector Embedding"
+        H[Embedder] --> |Generate| I[1,536-dim Vectors]
+        H --> |Cache| J[Embedding Cache]
+    end
+    
+    subgraph "Weaviate Indexing"
+        K[Indexer] --> |Index| L[Weaviate Collection]
+        K --> |Create| M[Named Vectors]
+    end
+    
+    subgraph "Feature Engineering"
+        N[Feature Extractor] --> |Extract| O[Feature Vectors]
+        P[Imputer] --> |Fill Missing Values| Q[Complete Records]
+    end
+    
+    subgraph Classification
+        R[Classifier] --> |Train| S[Logistic Regression Model]
+        R --> |Classify| T[Match Pairs]
+    end
+    
+    subgraph Clustering
+        U[Clusterer] --> |Build Graph| V[Entity Graph]
+        U --> |Apply Algorithm| W[Entity Clusters]
+    end
+    
+    subgraph Output
+        X[Entity Clusters JSON] --> Y[Analysis Reports]
+        X --> Z[Visualizations]
+    end
+    
+    A --> C
+    B --> R
+    D --> H
+    F --> N
+    G --> P
+    I --> K
+    L --> P
+    L --> N
+    Q --> N
+    O --> R
+    T --> U
+    W --> X
+    
+    %% External Connections
+    OpenAI[OpenAI API] -.-> H
