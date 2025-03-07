@@ -43,13 +43,14 @@ class Imputer:
         # Create a copy of the record to avoid modifying the original
         imputed_record = record.copy()
         
+        # Define record_key BEFORE using it in the logging statement
+        record_key = self._get_record_key(record)
+        
         # Check for null values that need imputation
-        # In the impute_record method:
         logger.info(f"Imputing record: {record_key}, fields: {self.fields_to_impute}")
         for field in self.fields_to_impute:
             if field not in record or record[field] == "NULL":
                 logger.info(f"Need to impute {field}")
-                record_key = self._get_record_key(record)
                 cache_key = f"{record_key}_{field}"
                 
                 if cache_key in self.imputed_values_cache:
