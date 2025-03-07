@@ -400,9 +400,13 @@ class ParallelFeatureExtractor:
                 features['composite_subjects_ratio'] = 0.0
     
     def _harmonic_mean(self, a, b):
-        """Compute harmonic mean of two values"""
-        if a <= 0 or b <= 0:
-            return 0.0
+        """Compute harmonic mean with better handling of very small values"""
+        if a <= 0.001 or b <= 0.001:
+            # For very small values, use a minimum threshold or weighted average
+            min_threshold = 0.001
+            a_adjusted = max(a, min_threshold)
+            b_adjusted = max(b, min_threshold)
+            return 2 * a_adjusted * b_adjusted / (a_adjusted + b_adjusted)
         return 2 * a * b / (a + b)
     
     def _extract_birth_death_years(self, person_string):

@@ -167,7 +167,15 @@ class Classifier:
                 'test_metrics': test_metrics,
                 'feature_importance': self._get_feature_importance()
             }
-            
+
+            # Analyze feature distribution among true matches
+            if sum(y_test) > 0:  # If we have any positive examples
+                match_features = X_test[y_test == 1]
+                feature_means = np.mean(match_features, axis=0)
+                logger.info("True match feature means:")
+                for i, name in enumerate(self.feature_names):
+                    logger.info(f"  {name}: {feature_means[i]:.4f}")
+
             # Log misclassified examples count
             misclassified_count = np.sum(y_pred != y_test)
             print(f"Misclassified examples: {misclassified_count} out of {len(y_test)} ({misclassified_count/len(y_test):.2%})")
@@ -552,7 +560,7 @@ class Classifier:
                                 apply_prefilter = True
                                 prefilter_type = "composite_cosine"
                                 prefilter_confidence = self.composite_override_threshold
-                                prefilter_threshold_used = self.composite_cosine_threshold
+                                
                                 logger.info(f"AutoMatch: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
                         
                         # Check for exact name prefilter if not already decided
