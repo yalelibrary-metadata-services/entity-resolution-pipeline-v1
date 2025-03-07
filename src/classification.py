@@ -423,6 +423,12 @@ class Classifier:
             feature_names = feature_extractor.get_feature_names()
             feature_indices = {name: idx for idx, name in enumerate(feature_names)}
             
+            # Also check for features that might have 'feature_' prefix - this is key for fixing the issue
+            for name in list(feature_indices.keys()):
+                prefixed_name = f"feature_{name}"
+                if prefixed_name not in feature_indices:
+                    feature_indices[prefixed_name] = feature_indices[name]
+            
             # Debug: log available feature names
             if len(candidates) > 0 and person_id.endswith('0'):  # Only log for some records to avoid spam
                 logger.debug(f"Available features: {feature_indices.keys()}")
@@ -456,28 +462,29 @@ class Classifier:
                     composite_cosine = 0.0
                     
                     # Try different possible feature names for composite similarity
-                    for feature_name in ['composite_cosine', 'composite']:
+                    for feature_name in ['composite_cosine', 'feature_composite_cosine', 'composite']:
                         if feature_name in feature_indices:
                             composite_feature_found = True
                             composite_cosine_idx = feature_indices[feature_name]
                             if composite_cosine_idx < len(feature_vector):
                                 composite_cosine = feature_vector[composite_cosine_idx]
+                                # Log the found feature name for debugging
+                                if composite_cosine >= 0.60:  # Only log high values for debugging
+                                    logger.debug(f"Found composite similarity in feature '{feature_name}' with value {composite_cosine:.4f}")
                                 break
                     
                     # Apply prefilter if feature was found
                     if self.composite_cosine_prefilter and composite_feature_found:
                         if composite_cosine >= self.composite_cosine_threshold:
-                            # Debug logging for high composite similarity
-                            if person_id.endswith('0') or candidate_id.endswith('0'):  # Only log some cases
-                                logger.info(f"AutoMatch: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
+                            # Always log high composite similarity matches for debugging
+                            logger.info(f"AutoMatch: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
                             
                             # Automatically classify as a match
                             matches.append((person_id, candidate_id, self.composite_override_threshold))
                             continue
                         # Debug logging for rejected candidate that had high similarity
                         elif composite_cosine >= 0.60:  # Log borderline cases for analysis
-                            if person_id.endswith('0') or candidate_id.endswith('0'):  # Only log some cases
-                                logger.debug(f"Borderline: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
+                            logger.debug(f"Borderline: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
                     
                     # Apply exact name prefilter if enabled
                     if self.exact_name_prefilter:
@@ -511,12 +518,15 @@ class Classifier:
                     person_cosine = 0.0
                     
                     # Try different possible feature names for person similarity
-                    for feature_name in ['person_cosine', 'person']:
+                    for feature_name in ['person_cosine', 'feature_person_cosine', 'person']:
                         if feature_name in feature_indices:
                             person_feature_found = True
                             person_cosine_idx = feature_indices[feature_name]
                             if person_cosine_idx < len(feature_vector):
                                 person_cosine = feature_vector[person_cosine_idx]
+                                # Log the found feature name for debugging
+                                if person_cosine >= 0.60:  # Only log high values for debugging
+                                    logger.debug(f"Found person similarity in feature '{feature_name}' with value {person_cosine:.4f}")
                                 break
                     
                     if self.person_cosine_prefilter and person_feature_found:
@@ -532,9 +542,9 @@ class Classifier:
                         matches.append((person_id, candidate_id, float(probability)))
                     elif composite_cosine >= 0.65:  # Debug: catch false negatives that should be matches
                         logger.warning(f"MISSED MATCH: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f} but probability={probability:.4f}")
+                
+                return matches
             
-            return matches
-        
         except Exception as e:
             logger.error(f"Error processing person {person_id}: {e}")
             return matches
