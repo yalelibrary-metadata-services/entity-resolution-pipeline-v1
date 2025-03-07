@@ -49,6 +49,15 @@ class Classifier:
         # Exact name prefilter
         self.exact_name_prefilter = config['features']['exact_name_prefilter']['enabled']
         self.override_threshold = config['features']['exact_name_prefilter']['override_threshold']
+
+        # Person cosine prefilter (new)
+        self.person_cosine_prefilter = config['features'].get('person_cosine_prefilter', {}).get('enabled', False)
+        self.person_cosine_threshold = config['features'].get('person_cosine_prefilter', {}).get('threshold', 0.70)
+        
+        # Composite cosine prefilter (new)
+        self.composite_cosine_prefilter = config['features'].get('composite_cosine_prefilter', {}).get('enabled', False)
+        self.composite_cosine_threshold = config['features'].get('composite_cosine_prefilter', {}).get('threshold', 0.65)
+        self.composite_override_threshold = config['features'].get('composite_cosine_prefilter', {}).get('override_threshold', 0.90)
         
         # Initialize model weights
         self.weights = None
@@ -410,6 +419,10 @@ class Classifier:
                 limit=self.config['querying']['max_candidates']
             )
             
+            # Get feature names once for this method execution
+            feature_names = feature_extractor.get_feature_names()
+            feature_indices = {name: idx for idx, name in enumerate(feature_names)}
+            
             # Process candidates
             for candidate_hash, similarity in candidates:
                 # Find person IDs with this candidate hash
@@ -459,6 +472,25 @@ class Classifier:
                     feature_vector = feature_extractor.extract_features(
                         record, candidate_record, query_engine
                     )
+                    
+                    # Apply person_cosine prefilter if enabled - REJECT low similarity
+                    if self.person_cosine_prefilter and 'person_cosine' in feature_indices:
+                        person_cosine_idx = feature_indices['person_cosine']
+                        if person_cosine_idx < len(feature_vector):
+                            person_cosine = feature_vector[person_cosine_idx]
+                            if person_cosine < self.person_cosine_threshold:
+                                # Skip this candidate (similarity too low)
+                                continue
+                    
+                    # Apply composite_cosine prefilter if enabled - ACCEPT high similarity
+                    if self.composite_cosine_prefilter and 'composite_cosine' in feature_indices:
+                        composite_cosine_idx = feature_indices['composite_cosine']
+                        if composite_cosine_idx < len(feature_vector):
+                            composite_cosine = feature_vector[composite_cosine_idx]
+                            if composite_cosine >= self.composite_cosine_threshold:
+                                # Automatically classify as a match
+                                matches.append((person_id, candidate_id, self.composite_override_threshold))
+                                continue
                     
                     # Predict match probability
                     probability = self.predict(feature_vector)

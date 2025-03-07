@@ -143,6 +143,8 @@ features:
     person_subjects_product: true
     composite_subjects_ratio: true
   
+    
+
   # Feature selection
   recursive_feature_elimination:
     enabled: true 
@@ -153,6 +155,17 @@ features:
   exact_name_prefilter:
     enabled: true
     override_threshold: 0.0  # Confidence threshold to override
+
+  # Person cosine similarity threshold filter
+  person_cosine_prefilter:
+    enabled: true
+    threshold: 0.70  # Minimum similarity threshold
+  
+  # Composite cosine similarity auto-match filter
+  composite_cosine_prefilter:
+    enabled: true
+    threshold: 0.65  # Similarity threshold for automatic match
+    override_threshold: 0.0  # Confidence when automatically matching
 
 # Classification settings
 classification:
