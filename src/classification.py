@@ -492,25 +492,29 @@ class Classifier:
                         )
                         
                         # Apply composite_cosine prefilter FIRST - ACCEPT high similarity
-                        
-                        
-                        # Try different possible feature names for composite similarity with better error handling
+                                                
+                        # Try to get the composite cosine feature
                         if self.composite_cosine_prefilter:
-                            composite_cosine_idx = feature_indices['composite_cosine']
-                            composite_cosine = feature_vector[composite_cosine_idx]
-                            logger.info(composite_cosine)    
-                            break
+                            try:
+                                if 'composite_cosine' in feature_indices:
+                                    composite_cosine_idx = feature_indices['composite_cosine']
+                                    composite_cosine = feature_vector[composite_cosine_idx]
+                                    composite_cosine_found = True
+                                    logger.debug(f"Got composite_cosine: {composite_cosine}")
+                            except Exception as e:
+                                logger.warning(f"Error getting composite_cosine: {e}")
                         
-                        # Apply prefilter if feature was found
-                        if self.composite_cosine_prefilter:
+                        # Apply the prefilter - auto accept if above threshold
+                        if self.composite_cosine_prefilter and composite_cosine_found:
                             if composite_cosine >= self.composite_cosine_threshold:
                                 # Always log high composite similarity matches
                                 logger.info(f"AutoMatch: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
                                 
                                 # Automatically classify as a match with high confidence
-                                matches.append((person_id, candidate_id, 1.0))
+                                confidence = self.composite_override_threshold
+                                matches.append((person_id, candidate_id, confidence))
                                 continue  # Skip further processing for this candidate
-                        
+
                         # Apply exact name prefilter if enabled
                         if self.exact_name_prefilter:
                             # Get original strings
@@ -542,17 +546,23 @@ class Classifier:
                         person_feature_found = False
                         person_cosine = 0.0
                         
-                        # Try different possible feature names for person similarity
-                        if self.person_cosine_prefilter:                            
-                            person_cosine_idx = feature_indices['person_cosine']                                
-                            person_cosine = feature_vector[person_cosine_idx]
-                            
-                            break
-                        
-                        if self.person_cosine_prefilter and person_feature_found:
+                        # Try to get the person cosine feature
+                        if self.person_cosine_prefilter:
+                            try:
+                                if 'person_cosine' in feature_indices:
+                                    person_cosine_idx = feature_indices['person_cosine']
+                                    person_cosine = feature_vector[person_cosine_idx]
+                                    person_cosine_found = True
+                                    logger.debug(f"Got person_cosine: {person_cosine}")
+                            except Exception as e:
+                                logger.warning(f"Error getting person_cosine: {e}")
+
+                        # Apply the prefilter - reject if below threshold
+                        if self.person_cosine_prefilter and person_cosine_found:
                             if person_cosine < self.person_cosine_threshold:
+                                matches.append((person_id, candidate_id, 0.25))
                                 # Skip this candidate (similarity too low)
-                              
+                                logger.debug(f"Rejecting pair due to low person_cosine: {person_cosine:.4f} < {self.person_cosine_threshold}")
                                 continue
                         
                         # Predict match probability with regular classifier

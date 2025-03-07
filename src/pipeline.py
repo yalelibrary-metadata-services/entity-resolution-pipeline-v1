@@ -229,7 +229,8 @@ class Pipeline:
                         prepared_pairs,
                         self.preprocessor,
                         self.query_engine,
-                        self.feature_extractor
+                        self.feature_extractor,
+                        self.imputer
                     )
                 
                 print(f"Feature extraction complete: {len(feature_vectors)} vectors")
@@ -357,7 +358,8 @@ class Pipeline:
                         self.preprocessor,
                         self.query_engine,
                         self.feature_extractor,
-                        self.classifier
+                        self.classifier,
+                        self.imputer
                     )
                 
                 # Store match pairs

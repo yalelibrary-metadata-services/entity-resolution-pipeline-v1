@@ -187,7 +187,7 @@ class BatchProcessor:
             delayed(item_process_func)(item, batch_result, **kwargs) for item in batch
         )
     
-    def process_record_pairs(self, record_pairs, preprocessor, query_engine, feature_extractor):
+    def process_record_pairs(self, record_pairs, preprocessor, query_engine, feature_extractor, imputer=None):  
         """Process record pairs for feature extraction in batches with sequential processing and improved progress tracking"""
         with Timer() as timer:
             total_pairs = len(record_pairs)
@@ -252,13 +252,21 @@ class BatchProcessor:
                 from scipy.spatial.distance import cosine
                 import traceback
                 
-                left_record, right_record, feature_names, vectors_dict, strings_dict, fields_to_embed = pair_data
+                # Unpack the additional imputer parameter
+                left_record, right_record, feature_names, vectors_dict, strings_dict, fields_to_embed, imputer, query_engine = pair_data
                 
                 # Skip if either record is missing
                 if left_record is None or right_record is None:
                     return None
                 
                 try:
+                    # Apply imputation if enabled
+                    if imputer is not None and imputer.enabled:
+                        if left_record:
+                            left_record = imputer.impute_record(left_record, query_engine)
+                        if right_record:
+                            right_record = imputer.impute_record(right_record, query_engine)
+
                     # Extract features using only the provided data
                     features = {}
                     
@@ -386,7 +394,9 @@ class BatchProcessor:
                         feature_extractor.feature_names,
                         vectors_dict,
                         strings_dict,
-                        feature_extractor.fields_to_embed
+                        feature_extractor.fields_to_embed,
+                        imputer,  # Add imputer
+                        query_engine  # Add query_engine for imputation
                     )
                     
                     # Extract features
@@ -438,7 +448,7 @@ class BatchProcessor:
         
         return all_feature_vectors
     
-    def classify_dataset(self, person_ids, preprocessor, query_engine, feature_extractor, classifier, clusterer=None):
+    def classify_dataset(self, person_ids, preprocessor, query_engine, feature_extractor, classifier, imputer=None, clusterer=None):
         """Classify dataset with optimized batch processing
         
         This specialized method handles entity classification and optional clustering.
@@ -510,7 +520,7 @@ class BatchProcessor:
                         for candidate_id in candidate_person_ids:
                             # Extract features
                             feature_vector = feature_extractor.extract_features(
-                                records[pid], records[candidate_id], query_engine
+                                records[pid], records[candidate_id], query_engine, imputer
                             )
                             
                             # Predict match probability

@@ -117,7 +117,7 @@ class ParallelFeatureExtractor:
             return self.selected_features
         return self.feature_names
     
-    def extract_features(self, left_record, right_record, query_engine):
+    def extract_features(self, left_record, right_record, query_engine, imputer=None):
         """Extract features for a single record pair (compatibility method)
         
         This method ensures compatibility with the original feature extractor interface
@@ -127,6 +127,7 @@ class ParallelFeatureExtractor:
             left_record: Left record dictionary
             right_record: Right record dictionary
             query_engine: Query engine instance for vector retrieval
+            imputer: Optional imputer for null values
             
         Returns:
             Feature vector (numpy array)
@@ -138,8 +139,8 @@ class ParallelFeatureExtractor:
         if not hasattr(self.thread_local, 'string_cache'):
             self.thread_local.string_cache = {}
         
-        # Call the implementation method
-        return self.extract_features_with_cache(left_record, right_record, query_engine)
+        # Call the implementation method with imputer
+        return self.extract_features_with_cache(left_record, right_record, query_engine, imputer)
     
     def extract_features_batch(self, record_pairs, query_engine):
         """Extract features for a batch of record pairs
@@ -211,16 +212,14 @@ class ParallelFeatureExtractor:
             for hash_val, text in strings.items():
                 self.thread_local.string_cache[hash_val] = text
     
-    def extract_features_with_cache(self, left_record, right_record, query_engine):
-        """Extract features using thread-local cache
-        
-        This method uses the pre-fetched data in thread-local cache
-        to avoid redundant API calls during parallel processing.
+    def extract_features_with_cache(self, left_record, right_record, query_engine, imputer=None):
+        """Extract features using thread-local cache with imputation support
         
         Args:
             left_record: Left record dictionary
             right_record: Right record dictionary
             query_engine: Query engine instance (for fallback)
+            imputer: Optional imputer for null values
             
         Returns:
             Feature vector (numpy array)
@@ -231,6 +230,13 @@ class ParallelFeatureExtractor:
         
         if not hasattr(self.thread_local, 'string_cache'):
             self.thread_local.string_cache = {}
+        
+        # Impute missing values if imputer is provided
+        if imputer is not None and imputer.enabled:
+            if left_record is not None:
+                left_record = imputer.impute_record(left_record, query_engine)
+            if right_record is not None:
+                right_record = imputer.impute_record(right_record, query_engine)
         
         features = {}
         
