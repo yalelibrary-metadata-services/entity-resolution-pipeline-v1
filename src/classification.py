@@ -356,10 +356,44 @@ class Classifier:
         return X_norm
     
     def predict(self, feature_vector):
-        """Predict whether a record pair matches"""
+        """Predict whether a record pair matches with dimension compatibility"""
         if not self.trained:
             logger.error("Classifier not trained")
             return 0.0
+        
+        # Handle dimension mismatch between feature vector and weights
+        if len(feature_vector) != len(self.weights):
+            logger.warning(f"Feature vector dimension ({len(feature_vector)}) doesn't match weights ({len(self.weights)})")
+            
+            # If we have feature names, we can match by name
+            if hasattr(self, 'feature_names') and self.feature_names:
+                logger.info("Attempting to align features by name")
+                aligned_vector = np.zeros(len(self.weights))
+                
+                # Get feature extractor's feature names if available
+                feature_extractor_names = None
+                if hasattr(self, 'feature_extractor') and hasattr(self.feature_extractor, 'get_feature_names'):
+                    feature_extractor_names = self.feature_extractor.get_feature_names()
+                
+                # Try to align features
+                for i, name in enumerate(self.feature_names):
+                    # First check if the name exists directly in feature_extractor_names
+                    if feature_extractor_names and name in feature_extractor_names:
+                        idx = feature_extractor_names.index(name)
+                        if idx < len(feature_vector):
+                            aligned_vector[i] = feature_vector[idx]
+                    # Also check for the feature_ prefix version
+                    elif feature_extractor_names and f"feature_{name}" in feature_extractor_names:
+                        idx = feature_extractor_names.index(f"feature_{name}")
+                        if idx < len(feature_vector):
+                            aligned_vector[i] = feature_vector[idx]
+                
+                # Use the aligned vector
+                feature_vector = aligned_vector
+            else:
+                # If we can't align, just use the first N features where N is the length of weights
+                logger.warning("No feature names available, using first N features")
+                feature_vector = feature_vector[:len(self.weights)]
         
         # Normalize feature vector
         X = self._normalize_feature_vector(feature_vector)
@@ -423,15 +457,9 @@ class Classifier:
             feature_names = feature_extractor.get_feature_names()
             feature_indices = {name: idx for idx, name in enumerate(feature_names)}
             
-            # Also check for features that might have 'feature_' prefix - this is key for fixing the issue
-            for name in list(feature_indices.keys()):
-                prefixed_name = f"feature_{name}"
-                if prefixed_name not in feature_indices:
-                    feature_indices[prefixed_name] = feature_indices[name]
+            logger.info(feature_names)
             
-            # Debug: log available feature names
-            if len(candidates) > 0 and person_id.endswith('0'):  # Only log for some records to avoid spam
-                logger.debug(f"Available features: {feature_indices.keys()}")
+            
             
             # Process candidates
             for candidate_hash, similarity in candidates:
@@ -443,107 +471,109 @@ class Classifier:
                 ]
                 
                 for candidate_id in candidate_person_ids:
-                    # Get candidate record
-                    candidate_record = preprocessor.get_record(candidate_id)
-                    
-                    # Impute missing values if needed
-                    if self.config['imputation']['enabled']:
-                        record = imputer.impute_record(record, query_engine)
-                        candidate_record = imputer.impute_record(candidate_record, query_engine)
-                    
-                    # Extract features
-                    feature_vector = feature_extractor.extract_features(
-                        record, candidate_record, query_engine
-                    )
-                    
-                    # Apply composite_cosine prefilter FIRST - ACCEPT high similarity
-                    # Check multiple possible feature names
-                    composite_feature_found = False
-                    composite_cosine = 0.0
-                    
-                    # Try different possible feature names for composite similarity
-                    for feature_name in ['composite_cosine', 'feature_composite_cosine', 'composite']:
-                        if feature_name in feature_indices:
-                            composite_feature_found = True
-                            composite_cosine_idx = feature_indices[feature_name]
-                            if composite_cosine_idx < len(feature_vector):
-                                composite_cosine = feature_vector[composite_cosine_idx]
-                                # Log the found feature name for debugging
-                                if composite_cosine >= 0.60:  # Only log high values for debugging
-                                    logger.debug(f"Found composite similarity in feature '{feature_name}' with value {composite_cosine:.4f}")
-                                break
-                    
-                    # Apply prefilter if feature was found
-                    if self.composite_cosine_prefilter and composite_feature_found:
-                        if composite_cosine >= self.composite_cosine_threshold:
-                            # Always log high composite similarity matches for debugging
-                            logger.info(f"AutoMatch: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
-                            
-                            # Automatically classify as a match
-                            matches.append((person_id, candidate_id, self.composite_override_threshold))
+                    try:
+                        # Get candidate record
+                        candidate_record = preprocessor.get_record(candidate_id)
+                        
+                        # Skip invalid records
+                        if not candidate_record:
                             continue
-                        # Debug logging for rejected candidate that had high similarity
-                        elif composite_cosine >= 0.60:  # Log borderline cases for analysis
-                            logger.debug(f"Borderline: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
-                    
-                    # Apply exact name prefilter if enabled
-                    if self.exact_name_prefilter:
-                        # Get original strings
-                        person_obj = query_engine.collection.query.fetch_objects(
-                            filters=Filter.by_property("hash").equal(person_hash),
-                            limit=1
+                        
+                        
+                        
+                        # Impute missing values if needed
+                        if self.config['imputation']['enabled']:
+                            record = imputer.impute_record(record, query_engine)
+                            candidate_record = imputer.impute_record(candidate_record, query_engine)
+                        
+                        # Extract features
+                        feature_vector = feature_extractor.extract_features(
+                            record, candidate_record, query_engine
                         )
                         
-                        candidate_obj = query_engine.collection.query.fetch_objects(
-                            filters=Filter.by_property("hash").equal(candidate_hash),
-                            limit=1
-                        )
+                        # Apply composite_cosine prefilter FIRST - ACCEPT high similarity
                         
-                        if person_obj.objects and candidate_obj.objects:
-                            person_string = person_obj.objects[0].properties.get('text', '')
-                            candidate_string = candidate_obj.objects[0].properties.get('text', '')
-                            
-                            # Use the feature extractor's birth/death year matching
-                            birth_death_match = feature_extractor._check_birth_death_year_match(
-                                person_string, candidate_string
+                        
+                        # Try different possible feature names for composite similarity with better error handling
+                        if self.composite_cosine_prefilter:
+                            composite_cosine_idx = feature_indices['composite_cosine']
+                            composite_cosine = feature_vector[composite_cosine_idx]
+                            logger.info(composite_cosine)    
+                            break
+                        
+                        # Apply prefilter if feature was found
+                        if self.composite_cosine_prefilter:
+                            if composite_cosine >= self.composite_cosine_threshold:
+                                # Always log high composite similarity matches
+                                logger.info(f"AutoMatch: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
+                                
+                                # Automatically classify as a match with high confidence
+                                matches.append((person_id, candidate_id, 1.0))
+                                continue  # Skip further processing for this candidate
+                        
+                        # Apply exact name prefilter if enabled
+                        if self.exact_name_prefilter:
+                            # Get original strings
+                            person_obj = query_engine.collection.query.fetch_objects(
+                                filters=Filter.by_property("hash").equal(person_hash),
+                                limit=1
                             )
                             
-                            # If birth/death years match exactly, it's a strong signal
-                            if birth_death_match > 0:
-                                matches.append((person_id, candidate_id, self.override_threshold))
+                            candidate_obj = query_engine.collection.query.fetch_objects(
+                                filters=Filter.by_property("hash").equal(candidate_hash),
+                                limit=1
+                            )
+                            
+                            if person_obj.objects and candidate_obj.objects:
+                                person_string = person_obj.objects[0].properties.get('text', '')
+                                candidate_string = candidate_obj.objects[0].properties.get('text', '')
+                                
+                                # Use the feature extractor's birth/death year matching
+                                birth_death_match = feature_extractor._check_birth_death_year_match(
+                                    person_string, candidate_string
+                                )
+                                
+                                # If birth/death years match exactly, it's a strong signal
+                                if birth_death_match > 0:
+                                    matches.append((person_id, candidate_id, 0.95))
+                                    continue  # Skip further processing for this candidate
+                        
+                        # Apply person_cosine prefilter if enabled - REJECT low similarity
+                        person_feature_found = False
+                        person_cosine = 0.0
+                        
+                        # Try different possible feature names for person similarity
+                        if self.person_cosine_prefilter:                            
+                            person_cosine_idx = feature_indices['person_cosine']                                
+                            person_cosine = feature_vector[person_cosine_idx]
+                            
+                            break
+                        
+                        if self.person_cosine_prefilter and person_feature_found:
+                            if person_cosine < self.person_cosine_threshold:
+                                # Skip this candidate (similarity too low)
+                              
                                 continue
+                        
+                        # Predict match probability with regular classifier
+                        probability = self.predict(feature_vector)
+                        
+                        # Check if it's a match based on probability
+                        if probability >= self.match_threshold:
+                            matches.append((person_id, candidate_id, float(probability)))
+                        
+                        elif composite_cosine >= 0.65 or person_cosine >= 0.7:
+                            # Log potential false negatives that should be matches
+                            logger.warning(f"POTENTIAL MISSED MATCH: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}, person_cosine={person_cosine:.4f} but probability={probability:.4f}")
                     
-                    # Apply person_cosine prefilter if enabled - REJECT low similarity
-                    person_feature_found = False
-                    person_cosine = 0.0
-                    
-                    # Try different possible feature names for person similarity
-                    for feature_name in ['person_cosine', 'feature_person_cosine', 'person']:
-                        if feature_name in feature_indices:
-                            person_feature_found = True
-                            person_cosine_idx = feature_indices[feature_name]
-                            if person_cosine_idx < len(feature_vector):
-                                person_cosine = feature_vector[person_cosine_idx]
-                                # Log the found feature name for debugging
-                                if person_cosine >= 0.60:  # Only log high values for debugging
-                                    logger.debug(f"Found person similarity in feature '{feature_name}' with value {person_cosine:.4f}")
-                                break
-                    
-                    if self.person_cosine_prefilter and person_feature_found:
-                        if person_cosine < self.person_cosine_threshold:
-                            # Skip this candidate (similarity too low)
-                            continue
-                    
-                    # Predict match probability with regular classifier
-                    probability = self.predict(feature_vector)
-                    
-                    # Check if it's a match
-                    if probability >= self.match_threshold:
-                        matches.append((person_id, candidate_id, float(probability)))
-                    elif composite_cosine >= 0.65:  # Debug: catch false negatives that should be matches
-                        logger.warning(f"MISSED MATCH: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f} but probability={probability:.4f}")
+                    except Exception as e:
+                        logger.error(f"Error processing candidate pair {person_id} - {candidate_id}: {e}")
+                        continue  # Skip this candidate but continue with others
+            
+            # Log summary for debugging
+            
                 
-                return matches
+            return matches  # Return all matches at the end
             
         except Exception as e:
             logger.error(f"Error processing person {person_id}: {e}")

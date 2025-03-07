@@ -147,14 +147,14 @@ features:
 
   # Feature selection
   recursive_feature_elimination:
-    enabled: true
+    enabled: false
     step: 1
     cv: 5
   
   # Name matching with birth/death years
   exact_name_prefilter:
     enabled: true
-    override_threshold: 0.0  # Confidence threshold to override
+    override_threshold: 1.0  # Confidence threshold to override
 
   # Person cosine similarity threshold filter
   person_cosine_prefilter:
@@ -165,7 +165,7 @@ features:
   composite_cosine_prefilter:
     enabled: true
     threshold: 0.65  # Similarity threshold for automatic match
-    override_threshold: 0.0  # Confidence when automatically matching
+    override_threshold: 1.0  # Confidence when automatically matching
 
 # Classification settings
 classification:

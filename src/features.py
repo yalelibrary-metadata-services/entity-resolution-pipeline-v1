@@ -127,7 +127,11 @@ class FeatureExtractor:
             feature_names.append('composite_subjects_ratio')
         
         # Birth/death year exact match
-        feature_names.append('birth_death_year_match')
+        #feature_names.append('birth_death_year_match')
+
+        #feature_names.append('person_cosine_prefilter')
+
+        #feature_names.append('composite_cosine_prefilter')
         
         return feature_names
     
