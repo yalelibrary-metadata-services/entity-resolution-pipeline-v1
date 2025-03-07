@@ -147,7 +147,7 @@ features:
 
   # Feature selection
   recursive_feature_elimination:
-    enabled: true 
+    enabled: true
     step: 1
     cv: 5
   
@@ -170,7 +170,7 @@ features:
 # Classification settings
 classification:
   algorithm: "logistic_regression"
-  match_threshold: 0.60      # Threshold for positive match
+  match_threshold: 0.75      # Threshold for positive match
   max_iterations: 2000      # Maximum iterations for gradient descent
   learning_rate: 0.01       # Learning rate for gradient descent
   regularization:
