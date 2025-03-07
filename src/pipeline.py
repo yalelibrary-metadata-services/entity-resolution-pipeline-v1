@@ -235,6 +235,7 @@ class Pipeline:
                 
                 print(f"Feature extraction complete: {len(feature_vectors)} vectors")
                 
+                
                 # Make sure we align labels with the successfully extracted features
                 if len(feature_vectors) < len(prepared_pairs):
                     print(f"Warning: {len(prepared_pairs) - len(feature_vectors)} feature extractions failed")
@@ -375,6 +376,19 @@ class Pipeline:
                 self.query_engine.clear_cache()
             
             print("=== CLASSIFICATION STAGE COMPLETED ===\n")
+
+            # if self.imputer.enabled:
+            #     imputation_stats = self.imputer.get_imputation_stats()
+            #     print("\n=== IMPUTATION STATISTICS ===")
+            #     print(f"Total imputation attempts: {imputation_stats['total_attempts']}")
+            #     print(f"Successful imputations: {imputation_stats['successful_imputations']}")
+            #     print(f"Cache hits: {imputation_stats['cache_hits']}")
+            #     print(f"Overall success rate: {imputation_stats['overall_success_rate']:.2f}%")
+                
+            #     print("\nBy Field:")
+            #     for field, metrics in imputation_stats['by_field'].items():
+            #         if metrics['attempts'] > 0:
+            #             print(f"  {field}: {metrics['success']}/{metrics['attempts']} ({metrics['success_rate']:.2f}%)")
         
         logger.info(f"Classification completed in {timer.elapsed:.2f} seconds")
         

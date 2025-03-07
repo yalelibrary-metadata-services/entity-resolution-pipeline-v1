@@ -45,7 +45,7 @@ class ParallelFeatureExtractor:
         self.fields_to_embed = config['fields']['embed']
         
         # Birth/death year pattern
-        #self.birth_death_pattern = self._compile_birth_death_pattern()
+        self.birth_death_pattern = self._compile_birth_death_pattern()
         
         # Feature names for reference
         self.feature_names = self._get_feature_names()

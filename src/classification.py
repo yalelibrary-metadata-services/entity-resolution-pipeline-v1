@@ -331,9 +331,15 @@ class Classifier:
     
     def _normalize_features(self, X):
         """Normalize features"""
+        # Check if X is empty
+        if X.shape[0] == 0 or X.shape[1] == 0:
+            logger.error(f"Cannot normalize features: Empty array with shape {X.shape}")
+            # Return the original array if it's empty
+            return X
+        
         # Compute min and max for each feature
         self.feature_min = np.min(X, axis=0)
-        self.feature_max = np.max(X, axis=0)
+        self.feature_max = np.max(X, axis=0)    
         
         # Avoid division by zero
         self.feature_range = self.feature_max - self.feature_min
@@ -435,13 +441,30 @@ class Classifier:
         return self
     
     def _process_person(self, person_id, all_person_ids, preprocessor, query_engine, feature_extractor, imputer):
-        """Process a single person and find matches"""
+        """Process a single person and find matches with improved prefilter handling
+        
+        This method examines potential matches for a person_id, applying both prefilters
+        and regular classification. Prefiltered pairs are still fully processed to ensure
+        complete feature extraction and proper test metrics.
+        
+        Args:
+            person_id: ID of the person to process
+            all_person_ids: List of all person IDs to check against
+            preprocessor: Preprocessor instance for record lookup
+            query_engine: Query engine for vector retrieval
+            feature_extractor: Feature extractor for feature calculation
+            imputer: Optional imputer for null values
+            
+        Returns:
+            List of match tuples (person_id, candidate_id, confidence)
+        """
         matches = []
         
         try:
             # Get record and person hash
             record = preprocessor.get_record(person_id)
             if not record or 'person' not in record or record['person'] == "NULL":
+                logger.debug(f"Skipping person {person_id}: Invalid record or missing person field")
                 return matches
             
             person_hash = record['person']
@@ -456,10 +479,6 @@ class Classifier:
             # Get feature names once for this method execution
             feature_names = feature_extractor.get_feature_names()
             feature_indices = {name: idx for idx, name in enumerate(feature_names)}
-            
-            logger.info(feature_names)
-            
-            
             
             # Process candidates
             for candidate_hash, similarity in candidates:
@@ -477,116 +496,161 @@ class Classifier:
                         
                         # Skip invalid records
                         if not candidate_record:
+                            logger.debug(f"Skipping candidate {candidate_id}: Invalid record")
                             continue
                         
-                        
-                        
                         # Impute missing values if needed
-                        if self.config['imputation']['enabled']:
-                            record = imputer.impute_record(record, query_engine)
-                            candidate_record = imputer.impute_record(candidate_record, query_engine)
+                        if self.config['imputation']['enabled'] and imputer:
+                            # Create copies to avoid modifying originals
+                            record_copy = record.copy()
+                            candidate_copy = candidate_record.copy()
+                            
+                            # Apply imputation and log changes
+                            logger.debug(f"Before imputation - record: {record_copy.get('provision', 'NULL')}")
+                            record_copy = imputer.impute_record(record_copy, query_engine)
+                            logger.debug(f"After imputation - record: {record_copy.get('provision', 'NULL')}")
+                            
+                            logger.debug(f"Before imputation - candidate: {candidate_copy.get('provision', 'NULL')}")
+                            candidate_copy = imputer.impute_record(candidate_copy, query_engine)
+                            logger.debug(f"After imputation - candidate: {candidate_copy.get('provision', 'NULL')}")
+                            
+                            # Use imputed records for feature extraction
+                            imputed_record = record_copy
+                            imputed_candidate = candidate_copy
+                        else:
+                            imputed_record = record
+                            imputed_candidate = candidate_record
                         
-                        # Extract features
+                        # Extract features - always do this regardless of prefilters
                         feature_vector = feature_extractor.extract_features(
-                            record, candidate_record, query_engine
+                            imputed_record, imputed_candidate, query_engine
                         )
                         
-                        # Apply composite_cosine prefilter FIRST - ACCEPT high similarity
-                                                
-                        # Try to get the composite cosine feature
+                        # Initialize prefilter decision tracking
+                        apply_prefilter = False
+                        prefilter_type = None
+                        prefilter_confidence = 0.0
+                        prefilter_threshold_used = 0.0
+                        
+                        # Check for composite_cosine prefilter - high value means automatic match
                         if self.composite_cosine_prefilter:
+                            composite_cosine_found = False
+                            composite_cosine = 0.0
+                            
                             try:
                                 if 'composite_cosine' in feature_indices:
                                     composite_cosine_idx = feature_indices['composite_cosine']
-                                    composite_cosine = feature_vector[composite_cosine_idx]
-                                    composite_cosine_found = True
-                                    logger.debug(f"Got composite_cosine: {composite_cosine}")
+                                    if composite_cosine_idx < len(feature_vector):
+                                        composite_cosine = feature_vector[composite_cosine_idx]
+                                        composite_cosine_found = True
+                                        logger.debug(f"Found composite_cosine = {composite_cosine:.4f}")
                             except Exception as e:
                                 logger.warning(f"Error getting composite_cosine: {e}")
-                        
-                        # Apply the prefilter - auto accept if above threshold
-                        if self.composite_cosine_prefilter and composite_cosine_found:
-                            if composite_cosine >= self.composite_cosine_threshold:
-                                # Always log high composite similarity matches
+                            
+                            # Apply the prefilter - auto accept if above threshold
+                            if composite_cosine_found and composite_cosine >= self.composite_cosine_threshold:
+                                apply_prefilter = True
+                                prefilter_type = "composite_cosine"
+                                prefilter_confidence = self.composite_override_threshold
+                                prefilter_threshold_used = self.composite_cosine_threshold
                                 logger.info(f"AutoMatch: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}")
-                                
-                                # Automatically classify as a match with high confidence
-                                confidence = self.composite_override_threshold
-                                matches.append((person_id, candidate_id, confidence))
-                                continue  # Skip further processing for this candidate
-
-                        # Apply exact name prefilter if enabled
-                        if self.exact_name_prefilter:
-                            # Get original strings
-                            person_obj = query_engine.collection.query.fetch_objects(
-                                filters=Filter.by_property("hash").equal(person_hash),
-                                limit=1
-                            )
-                            
-                            candidate_obj = query_engine.collection.query.fetch_objects(
-                                filters=Filter.by_property("hash").equal(candidate_hash),
-                                limit=1
-                            )
-                            
-                            if person_obj.objects and candidate_obj.objects:
-                                person_string = person_obj.objects[0].properties.get('text', '')
-                                candidate_string = candidate_obj.objects[0].properties.get('text', '')
-                                
-                                # Use the feature extractor's birth/death year matching
-                                birth_death_match = feature_extractor._check_birth_death_year_match(
-                                    person_string, candidate_string
+                        
+                        # Check for exact name prefilter if not already decided
+                        if self.exact_name_prefilter and not apply_prefilter:
+                            try:
+                                # Get original strings
+                                person_obj = query_engine.collection.query.fetch_objects(
+                                    filters=Filter.by_property("hash").equal(person_hash),
+                                    limit=1
                                 )
                                 
-                                # If birth/death years match exactly, it's a strong signal
-                                if birth_death_match > 0:
-                                    matches.append((person_id, candidate_id, 0.95))
-                                    continue  # Skip further processing for this candidate
+                                candidate_obj = query_engine.collection.query.fetch_objects(
+                                    filters=Filter.by_property("hash").equal(candidate_hash),
+                                    limit=1
+                                )
+                                
+                                if person_obj.objects and candidate_obj.objects:
+                                    person_string = person_obj.objects[0].properties.get('text', '')
+                                    candidate_string = candidate_obj.objects[0].properties.get('text', '')
+                                    
+                                    # Use the feature extractor's birth/death year matching
+                                    birth_death_match = feature_extractor._check_birth_death_year_match(
+                                        person_string, candidate_string
+                                    )
+                                    
+                                    # If birth/death years match exactly, it's a strong signal
+                                    if birth_death_match > 0:
+                                        apply_prefilter = True
+                                        prefilter_type = "birth_death_year"
+                                        prefilter_confidence = 0.95  # High confidence
+                                        logger.info(f"AutoMatch: {person_id} - {candidate_id} with exact birth/death year match")
+                            except Exception as e:
+                                logger.warning(f"Error in birth/death prefilter: {e}")
                         
-                        # Apply person_cosine prefilter if enabled - REJECT low similarity
-                        person_feature_found = False
-                        person_cosine = 0.0
-                        
-                        # Try to get the person cosine feature
-                        if self.person_cosine_prefilter:
+                        # Check for person_cosine prefilter if not already decided - low value means automatic reject
+                        if self.person_cosine_prefilter and not apply_prefilter:
+                            person_cosine_found = False
+                            person_cosine = 0.0
+                            
                             try:
                                 if 'person_cosine' in feature_indices:
                                     person_cosine_idx = feature_indices['person_cosine']
-                                    person_cosine = feature_vector[person_cosine_idx]
-                                    person_cosine_found = True
-                                    logger.debug(f"Got person_cosine: {person_cosine}")
+                                    if person_cosine_idx < len(feature_vector):
+                                        person_cosine = feature_vector[person_cosine_idx]
+                                        person_cosine_found = True
+                                        logger.debug(f"Found person_cosine = {person_cosine:.4f}")
                             except Exception as e:
                                 logger.warning(f"Error getting person_cosine: {e}")
-
-                        # Apply the prefilter - reject if below threshold
-                        if self.person_cosine_prefilter and person_cosine_found:
-                            if person_cosine < self.person_cosine_threshold:
-                                matches.append((person_id, candidate_id, 0.25))
-                                # Skip this candidate (similarity too low)
+                            
+                            # Apply the prefilter - reject if below threshold
+                            if person_cosine_found and person_cosine < self.person_cosine_threshold:
+                                apply_prefilter = True
+                                prefilter_type = "person_cosine"
+                                prefilter_confidence = 0.25  # Low confidence
+                                prefilter_threshold_used = self.person_cosine_threshold
                                 logger.debug(f"Rejecting pair due to low person_cosine: {person_cosine:.4f} < {self.person_cosine_threshold}")
-                                continue
                         
-                        # Predict match probability with regular classifier
-                        probability = self.predict(feature_vector)
+                        # Make classification decision
+                        if apply_prefilter:
+                            # Use prefilter decision
+                            matches.append((person_id, candidate_id, prefilter_confidence))
+                            logger.debug(f"Prefilter decision ({prefilter_type}): {person_id} - {candidate_id} with confidence {prefilter_confidence:.4f}")
+                        else:
+                            # Use regular classifier
+                            probability = self.predict(feature_vector)
+                            
+                            # Check if it's a match based on probability
+                            if probability >= self.match_threshold:
+                                matches.append((person_id, candidate_id, float(probability)))
+                                logger.debug(f"Regular classification: {person_id} - {candidate_id} with probability {probability:.4f}")
+                            
+                            # Log potential missed matches with high similarity but low probability
+                            elif 'composite_cosine' in feature_indices and 'person_cosine' in feature_indices:
+                                composite_idx = feature_indices['composite_cosine']
+                                person_idx = feature_indices['person_cosine']
+                                
+                                if (composite_idx < len(feature_vector) and 
+                                    person_idx < len(feature_vector) and
+                                    feature_vector[composite_idx] >= 0.65 and 
+                                    feature_vector[person_idx] >= 0.7):
+                                    
+                                    logger.warning(f"POTENTIAL MISSED MATCH: {person_id} - {candidate_id} with " +
+                                                f"composite_cosine={feature_vector[composite_idx]:.4f}, " +
+                                                f"person_cosine={feature_vector[person_idx]:.4f} but " +
+                                                f"probability={probability:.4f}")
                         
-                        # Check if it's a match based on probability
-                        if probability >= self.match_threshold:
-                            matches.append((person_id, candidate_id, float(probability)))
-                        
-                        elif composite_cosine >= 0.65 or person_cosine >= 0.7:
-                            # Log potential false negatives that should be matches
-                            logger.warning(f"POTENTIAL MISSED MATCH: {person_id} - {candidate_id} with composite_cosine={composite_cosine:.4f}, person_cosine={person_cosine:.4f} but probability={probability:.4f}")
-                    
                     except Exception as e:
                         logger.error(f"Error processing candidate pair {person_id} - {candidate_id}: {e}")
                         continue  # Skip this candidate but continue with others
             
             # Log summary for debugging
+            if matches:
+                logger.debug(f"Found {len(matches)} matches for person {person_id}")
             
-                
-            return matches  # Return all matches at the end
+            return matches  # Return all matches
             
         except Exception as e:
-            logger.error(f"Error processing person {person_id}: {e}")
+            logger.error(f"Error processing person {person_id}: {e}", exc_info=True)
             return matches
     
     def get_match_pairs(self):

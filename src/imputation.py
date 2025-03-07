@@ -44,9 +44,11 @@ class Imputer:
         imputed_record = record.copy()
         
         # Check for null values that need imputation
+        # In the impute_record method:
+        logger.info(f"Imputing record: {record_key}, fields: {self.fields_to_impute}")
         for field in self.fields_to_impute:
             if field not in record or record[field] == "NULL":
-                # Check if already cached
+                logger.info(f"Need to impute {field}")
                 record_key = self._get_record_key(record)
                 cache_key = f"{record_key}_{field}"
                 
@@ -177,6 +179,15 @@ class Imputer:
             return hashlib.md5(value.encode('utf-8')).hexdigest()
         elif self.hash_algorithm == 'sha1':
             return hashlib.sha1(value.encode('utf-8')).hexdigest()
+        elif self.hash_algorithm == 'mmh3':
+            try:
+                import mmh3
+                # Convert to hex string to match md5/sha1 format
+                hash_value = mmh3.hash128(value.encode('utf-8'), signed=False)
+                return format(hash_value, 'x')
+            except ImportError:
+                logger.warning("mmh3 module not found, falling back to md5")
+                return hashlib.md5(value.encode('utf-8')).hexdigest()
         else:
             raise ValueError(f"Unsupported hash algorithm: {self.hash_algorithm}")
     
