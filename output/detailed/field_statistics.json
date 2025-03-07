@@ -1,0 +1,42 @@
+{
+  "title": {
+    "count": 1799,
+    "min_length": 2,
+    "max_length": 868,
+    "mean_length": 104.70483602001111,
+    "median_length": 65,
+    "std_length": 108.37170780589521
+  },
+  "composite": {
+    "count": 2257,
+    "min_length": 53,
+    "max_length": 3382,
+    "mean_length": 400.5427558706247,
+    "median_length": 353,
+    "std_length": 218.8359222978033
+  },
+  "person": {
+    "count": 159,
+    "min_length": 3,
+    "max_length": 106,
+    "mean_length": 24.19496855345912,
+    "median_length": 21,
+    "std_length": 18.156024690063102
+  },
+  "subjects": {
+    "count": 1459,
+    "min_length": 2,
+    "max_length": 3109,
+    "mean_length": 135.47566826593558,
+    "median_length": 87,
+    "std_length": 180.5473133045264
+  },
+  "provision": {
+    "count": 1664,
+    "min_length": 4,
+    "max_length": 365,
+    "mean_length": 56.34134615384615,
+    "median_length": 44,
+    "std_length": 40.989343386602236
+  }
+}

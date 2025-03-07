@@ -1,0 +1,20 @@
+{
+  "bias": -0.7791475382513592,
+  "weights": {
+    "composite_cosine": 0.20288099328543954,
+    "person_cosine": 0.6100086739673565,
+    "title_cosine": 0.029226683922015155,
+    "provision_cosine": 0.0007583579956876954,
+    "subjects_cosine": 0.1519413216913845,
+    "person_levenshtein": 0.4928317100978894,
+    "person_title_harmonic": 0.19652928908904116,
+    "person_provision_harmonic": 0.24140908356501148,
+    "person_subjects_harmonic": 0.27574385618078473,
+    "title_subjects_harmonic": 0.12387059427881868,
+    "title_provision_harmonic": 0.05479368156514985,
+    "provision_subjects_harmonic": 0.10596624810758645,
+    "person_subjects_product": 0.39459327207464673,
+    "composite_subjects_ratio": -0.008143578664694853
+  },
+  "threshold": 0.75
+}

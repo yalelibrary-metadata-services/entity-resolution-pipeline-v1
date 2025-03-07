@@ -1,0 +1,52 @@
+{
+  "timestamp": "2025-03-07T10:14:33.689531",
+  "preprocessing": {
+    "unique_strings": 7327,
+    "records": 2354,
+    "person_ids": 2354
+  },
+  "embedding": {
+    "embeddings": 7327,
+    "dimension": 1536
+  },
+  "indexing": {
+    "indexed": true
+  },
+  "classification": {
+    "matches": 1687,
+    "threshold": 0.75,
+    "metrics": {
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "accuracy": null
+    }
+  },
+  "clustering": {
+    "clusters": 45,
+    "algorithm": "connected_components"
+  },
+  "config": {
+    "mode": "development",
+    "openai_model": "text-embedding-3-small"
+  },
+  "features": {
+    "total_features": 14,
+    "feature_list": [
+      "composite_cosine",
+      "person_cosine",
+      "title_cosine",
+      "provision_cosine",
+      "subjects_cosine",
+      "person_levenshtein",
+      "person_title_harmonic",
+      "person_provision_harmonic",
+      "person_subjects_harmonic",
+      "title_subjects_harmonic",
+      "title_provision_harmonic",
+      "provision_subjects_harmonic",
+      "person_subjects_product",
+      "composite_subjects_ratio"
+    ]
+  }
+}

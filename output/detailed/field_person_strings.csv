@@ -1,0 +1,160 @@
+hash,string,length,frequency,field_count
+6f1cad26ddb67e25dc50d5c0dec839e6,"Strauss, Richard, 1864-1949",27,76,76
+35a217c243d997c799cfc5cc99ede15d,"Cooper, James Fenimore, 1789-1851",33,64,64
+b89c3ca9de0e482d7b299b341fc90820,"Schubert, Franz, 1797-1828",26,63,63
+92e80cf26926655c1aca6e201d72c6ba,"Joyce, James, 1882-1941",23,46,46
+3758ae71a044c3d3d503d56c73b66423,"Hogarth, William, 1697-1764",27,43,42
+a8a8c6143c0abf0b3afa47d1281de404,"Lucan, 39-65",12,41,41
+99b307884821b64b1a9f84057b766611,"Mauriac, François, 1885-1970",29,39,39
+ae3594e695e1cf0751f9c38e262525db,"Hall, Joseph, 1574-1656",23,35,34
+e2b4f6c731a7407cd8dc87610a2d2bec,"Bolton, Robert, 1572-1631",25,35,35
+1a4fc768630475e77a07a444baa8c4e1,"Baum, L. Frank (Lyman Frank), 1856-1919",39,34,34
+a715dd4ebec4df13f249f1729b89dd6d,"Bassett, Leslie, 1923-2016",26,34,34
+decc30ea3d1f3b3afc72a4c41b144c9d,"Faulkner, William, 1897-1962",28,33,33
+59948a1212b5245a155a282ba55896d8,"Campos, Haroldo de",18,32,32
+ed30856d8ac014ae62e2646c81cbb357,"Moncrieff, A. R. Hope (Ascott Robert Hope), 1846-1927",53,32,32
+4a19faa9a2a0fa65ace37f38f6a4ee6f,"Owen, Robert, 1771-1858",23,32,31
+79102f4f34b9da61fa9a53c154f6dafc,"Priestley, Joseph, 1733-1804",28,31,30
+4b269c257b188c0a25ff46856bf0c6ab,"Steiner, Rudolf, 1861-1925",26,31,31
+2ba302dddb31dd0207d2e5e81a03f24c,"Newman, John Henry, 1801-1890",29,31,31
+609ee570971d9b0b55249b0223414cfe,"Frost, Robert, 1874-1963",24,31,28
+c0782818eea45b5fcb107ed74de80f2e,"Browning, Elizabeth Barrett, 1806-1861",38,31,31
+6463453b2a2932313c75c36cd16f6106,"Koch, Robert, 1843-1910",23,30,30
+2240dd3c981d022067e2196a3b410d7e,"Spencer, Herbert, 1820-1903",27,29,29
+c8c8c8783b1345f9ef776a3526e21169,"Rowlandson, Thomas, 1756-1827",29,29,29
+67c6f8472fce30bcec08ee74c9e0ce19,"Price, Richard, 1723-1791",25,28,28
+668e316a7368428e742631d5aa85958,"Baxter, Richard, 1615-1691",26,28,28
+7d84f4cd21d9074373e7345f4dd9000d,"Zhu, Xi, 1130-1200 朱熹, 1130-1200",32,28,28
+7311ee435cafb2c615ce20c2b9a01d4c,"Ward, Seth, 1617-1689",21,28,28
+fe7690421777f082bdfb9303661287fc,"Rowe, Nicholas, 1674-1718",25,28,28
+476bd1dddf99eef5a5bfcf0296ce47a5,"Clay, Henry, 1777-1852",22,27,27
+9ff19e55bca36ca91fa05a9dbc33f416,"Buchan, John, 1875-1940",23,27,26
+43b6629dca0881b6178ef33983d249a1,"Miller, Philip, 1691-1771",25,26,26
+72dc2a6b3e5e7bc4b04b8512d4b16504,"Tillotson, John, 1630-1694",26,26,26
+8c65e2f5b308ce9fe0102f80dab1e30d,"West, Benjamin, 1730-1813",25,26,26
+2a183afb89e664b9a3a9ed4a02bf9900,"Smith, Chris, 1879-1949",23,26,26
+7dc49c31f1fa0d0145d2993030388fab,"Butler, John, 1717-1802",23,26,26
+773fe61dd178f9abeb851a66a31af622,"Thomas, Elmer, 1876-1965",24,26,26
+2e7c8b57b66a093da3a55ea86b3f55d,"Laud, William, 1573-1645",24,26,25
+4bbc848d29df7fbc131ef81b56b1b468,"White, Edmund, 1940-",20,25,25
+dd839d6115e08a18d2bc02ebfa416b07,"Wesley, John, 1703-1791",23,25,25
+6c6daa55cb74fd612a0c23a23964983a,"Ward, Edward, 1667-1731",23,25,25
+db10515a7df0bd81b91ef4ffa1ea68b0,"Stanley, Thomas, 1625-1678",26,25,25
+3b5f8a7ab1c0e41ed045d2e4172fb790,"Butler, Samuel, 1612-1680",25,25,25
+56b2635bbfea52fdbd4e5dd335b0fe93,"Sheridan, Richard Brinsley, 1751-1816",37,25,25
+7beef2c44aaea962fe58c92ad5c7dc14,"Miller, Leslie, 1957-",21,25,25
+fc2ada27a1cdabaa0412b5dafadc3528,"Stadler, Joseph Constantine",27,24,24
+9ded5f8709147de8a2af93dd69a472f0,"Allen, William, -1686",21,24,24
+e109fa23ca2570d1eca5ffc60f1df89f,"Hoadly, Benjamin, 1676-1761",27,24,24
+49b31c97137431ae4af29ed422093e8,"Thomas, Isaiah, 1749-1831",25,24,24
+4927867592140009a32877db7c773227,"Brown, Lew",10,24,24
+f0a9fb1e725881b4ad3b3b863436b337,"Owen, David, -1623",18,24,24
+a5f5b8e182f9c73c6873a4f431d6654d,"Roberts, Jean, 1918-",20,24,24
+7a2da23f8bc3f20319dd65b58887ccf7,"Wilson, Woodrow, 1856-1924",26,24,24
+8150d8f7a6cbcd0bce5fea264741198b,"Burnham, Henry Eben, 1844-1917",30,24,24
+4abb0aa8e2f75bf527137cd3114e37d,"Proctor, Richard A. (Richard Anthony), 1837-1888",48,24,24
+731b601ea2d3c3543d311d203cc1c8eb,"Haley, James Andrew, 1899-1981",30,24,24
+25b5f629d148cf590798bedbd93365d3,"Thayer, Nathaniel, 1769-1840",28,24,24
+6d752d8268c6e09431061310f15b068,"Robinson, Henry, 1605?-1664?",28,24,24
+13d95a1c8205b4abb3bf935006cd2c84,"Gibson, Jason (Math instructor)",31,24,24
+e25065f757f0eaf701a8566670560702,张资平,3,24,24
+3790228e4ace1d4181f3061b9ba0f947,"Benjamin, J. P. (Judah Philip), 1811-1884",41,24,24
+bb13351dc4407ce58df6b79b3346e83b,"Schubert, Franz",15,23,23
+9f7dbeec4ad3b6f360f7b28479e3cb8c,"Olson, Steve, 1956-",19,22,22
+d89c7df20a3d8d2647a59edaab9a1802,Bilü 碧侶,8,22,22
+579b0f1d17a9cbf1d7ac4d9e46e0a04e,"Laughlin, James, 1914-1997",26,22,22
+481b222fead7363f87d4ee73367c945e,"Stewart, David",14,22,22
+143acaf17d1aeffa90627ed00ee4d6a0,"Sheridan, Richard Brinsley",26,21,21
+7be29290ef468cc45bb82c45550a6b3e,"Everett, Edward, 1794-1865",26,18,18
+dfa8f5f4efc29f296f11a2147d147681,"Sima, Qian, approximately 145 B.C.-approximately 86 B.C. 司馬遷, approximately 145 B.C.-approximately 86 B.C.",106,18,18
+7fd534d27659648acb9ea10fc78ade05,"Berry, Mary, 1763-1852",22,16,16
+fc9d64a0f0528cdb230d21eafe8be26a,"Strauss, Richard",16,16,16
+56d2ddf05869fc2896c092c7fd368c5e,"Bloom, Harold",13,16,16
+e8ca399167f9f23c9e1aaa8b1c94b943,"Miller, John",12,15,14
+a62dc4316fe6d7450bf7434643f8d8b8,"Wu, Han",7,14,14
+f32f2609b9c0f610b48e99554e979924,"Wu, Han, 1909- 吳晗, 1909-",24,13,13
+5845ac097b86092b058d08edf7ff7b8d,"Butler, John",12,12,12
+de252af0b63315c0abd042c409a9fec6,"Mellon, Paul",12,11,11
+3b39ece5685ee27c9e52ecd8fb34f647,"Allen, William",14,10,10
+a0b396490e7d4b6738b706d61ff43842,"Wu, Han, 1909- 吴晗, 1909-",24,10,10
+6b91c4c3427daaa05e7328fee804852,"Steiner, Rudolf",15,9,9
+8e3b1516b8bd3e663772eb56db33bc3c,"Butler, Samuel",14,9,9
+9a5660a47f3efc33eabe533f8b2eb042,"West, Benjamin",14,8,8
+e1fb760441b05a3b9137d4897e24c69a,"Frost, Robert",13,8,8
+d098f041617807590782fd8031495f65,"Hogarth, William",16,8,8
+cd358aeab20e87310497c9c564eba9f6,"Sima, Qian, approximately 145 B.C.-approximately 86 B.C. 司马迁, approximately 145 B.C.-approximately 86 B.C.",106,7,7
+b64a67d7944fdae033195364029b780b,"Robinson, Henry",15,7,7
+ce4b6216fb60cdc9497a812e47ddeead,"Spencer, Herbert",16,7,7
+613e4da0b6a70e55853fbde190f9dd28,"Price, Richard",14,6,6
+87b5475fdc9409a86cf4dcdc9a91a258,"Smith, Chris",12,6,6
+830cc8555293a17488e789f9f1a66d09,"Faulkner, William",17,6,6
+92f02f71508d8f79e7e301e8ef6cb3ea,"Wu, Han, 1909-",14,6,6
+56f3325f5096b827959d456cd78810ec,"Bolton, Robert",14,6,6
+76e6a461a94ea6ccb310ff510d0d2d7a,"Joyce, James",12,6,6
+d7ff86b2b18e73804ba0f8171b8cbd13,"Rowlandson, Thomas",18,6,3
+57142eb5bafd08b02096bb5a9ec14196,Lucan,5,5,5
+9fb5724c0946cbb8428db456fc9bc559,"Niederstein, Peter",18,4,4
+46f6aa390f3ac2c1b5ec1b7e25b9893e,"Rowe, Nicholas",14,4,4
+6e8f8f4205a3d83927d66b18f27850c1,"Hall, Joseph",12,4,4
+ea01e9e64dc140a2aafb322cc5bab0b3,"Koch, Robert",12,4,4
+2e04bdcfede844e6efdd458aa7c83b9a,"Owen, Robert",12,4,4
+9fb99a2ce89eda0776b558e20bd3114e,"Priestley, Joseph",17,4,4
+e988dcdd2fb2b2d9fcd57fb7f391c15a,"Cooper, James Fenimore",22,4,4
+e247a9fdf7185e1ab30d722a6f1680d,"Ward, Seth",10,4,4
+bd04c72ad3ac0ca366ad0412a719d94a,"Laud, William",13,4,4
+11ed00cbf0a1653c1f01aa605b0fb27f,"Haley, James A.",15,4,4
+c1bda89532e08b3c50693d46e884c6d5,"Everett, Edward",15,4,4
+7167a34509faee5904e601b04c98903f,"Miller, Leslie",14,3,3
+7c2d16864bf6b7baf78418c03eda573d,"Sima, Qian, approximately 145 B.C.-approximately 86 B.C. 司馬遷, approximately 145-approximately 86 B.C.",101,3,3
+8a9d9b72c1e76df93a92949465e923ca,"Zhu, Xi, 1130-1200",18,3,3
+57949e038bf0f96bc58f7fab9319ab77,"Sima, Qian, approximately 145 B.C.-approximately 86 B.C. 司馬迁, approximately 145 B.C.-approximately 86 B.C.",106,3,3
+72d3971cceac11e262f1f045894e4ae1,"Clay, Henry",11,3,3
+3f24f741443f520180e43c8e5000ecf6,"Zhu, Xi 朱禧",10,3,3
+d5926d3230777e920adbdb19ae5d3551,"Mellon, Paul, Mrs",17,3,3
+9c528ef1a512f2c9e1f911d02b4bc8e8,"Bassett, Leslie",15,2,2
+d1664de3a18c81cfa287aa290bf7bb53,Riviere,7,2,2
+99f6113343ba3a70cf78da760c2e64a2,"Buchan, John",12,2,2
+9db6b1188cb56585f07d1db34595ef8e,"Wu, Han, 1909-1969 吳晗, 1909-1969",32,2,2
+bb4ef3603ef84c8ea9a9469f3e8d459b,"Laughlin, James",15,2,2
+cf9184c3d0502e5e08c21545bc5790d,"Miller, Philip",14,2,2
+29ff3f70d7bece5bbe9c36c291b37d94,"Thayer, Nathaniel",17,2,2
+ba80434cdd491b849fde5aa75eb3e42f,"Koch, Róbert",13,2,2
+51e8c433aae796cf4f1f7116fe5d1e08,Moncrieff,9,2,2
+1574ce5a6c94340e352d31b4b6399da3,"Newman, John H.",15,2,2
+db5325b9bac4d56f7c70f8e790c2f3f2,Bilü 碧侣,8,2,2
+ebdbacdd305572b7d047d2e22360230b,"Brown, Lewis",12,2,2
+6b77968e547eed411d48cbb25110b7a5,"Stadler, Joseph Constantine, active 1780-1812",45,2,2
+caaf72a335e32aaf0582864770461f4d,"Sima, Qian, approximately 145 B.C.-approximately 86 B.C. 司马遷, a. 145-ca. 86 B.C.",80,2,2
+5338b4d30d2a43d7345fc49d962e02f6,"Proctor, Richard A.",19,2,2
+da1f1b32005c06e4b7f9eee2b56708c8,"Mellon, Paul, 1907-1999",23,2,2
+e53cffd269aae0e85713ed9e622f962,"Mellon, Paul. 1907-1999.",24,2,2
+ff75b0f119b5ea0736b6e789f7cb2a81,"Wu, Han, 1909-1969 吴晗, 1909-1969",32,2,2
+c86391fbd53518947ee0799c7539c4bb,"Price, Ric",10,2,2
+762ee578d294fa3146cbdac4092ed108,"Palmquist, Peter E.",19,2,2
+baa768f96b7d007b1ff7b664a1d86840,"Thomas, Isaiah",14,2,2
+71e4058bbe5777885d3a247c3af9e739,"Newman, John Henry",18,2,1
+c67e81eb59e05a2b4dac3593f1ff0d38,"Sima, Qian, approximately 145 B.C.-approximately 86 B.C. 司马迁， approximately 145 B.C.-approximately 86 B.C.",106,2,2
+6726576203a98eb0d9960cbe2f227942,"Roberts, Jean",13,2,2
+3f842fde5440bdf4c8aac6b3ad913e80,"Tillotson, John",15,2,2
+b73b53fe91e11d337fc0750dd5c175c0,"White, Edmund",13,2,2
+4b6581627b6e891e7d3bfd1b1eda8eb,"Stanley, Thomas",15,2,2
+ae0c8baef05d4d697d0b5ff10715e450,"Hoadly, Benjamin",16,2,2
+5337e4738127eeb998a55b03c159680a,Faulkner William,16,1,1
+3caf980dfa79c2183d23f893e97cda89,"West, Benjamin, 1738-1820",25,1,1
+5023bb198fdf64e11a4bdf1137e3157f,"Zhu, Xi 朱溪",10,1,1
+4a4b191ec8258842acf381bc27292d11,"West, Benjamin, Jr",18,1,1
+a1529a7fc54be5c2fcd3f8aa931d9ee0,"Owen, Robert Dale, 1801-1877",28,1,1
+a17b0fb5fba93c7b9a923e5d0062937f,"Browning, Elizabeth Barrett",27,1,1
+272df8d87311e81d3699be4955f60fda,"Baum, L. Frank (Lyman Frank)",28,1,1
+84e41490fcdf74b0986d77b3a5b6cd56,"Laud, William, 1573-164",23,1,1
+2d50408d3ab368e43055a9cf2e877d0c,"Baum, L. Frank",14,1,1
+e0cb732a15c80dcaddce23fb5be1a3f,"Robinson, Henry, 1605?-1664?.",29,1,1
+fdad1d7fd0e65564d1fb5c9527a92a15,"Joyce, James, 1882-",19,1,1
+60798ca94f41ef2e28691e5370a800fb,"White, Edmund, 1940",19,1,1
+fd255e999faa522eb1ffee8be5e2473b,"Wesley, John",12,1,1
+4693cbfb73ad57ecca0f25b82441ca6d,"Ward, Edward",12,1,1
+b25253944b9073e2a5d2ef068976bb41,"Wu, Han, 1909- Wu, Han, 1909-",29,1,1
+17a739975b2b0c476aecc14f6114c3d,"Sima, Qian, approximately 145 B.C.-approximately 86 B.C. 司马迁, ca. 145-ca. 86 B.C.",81,1,1
+7932a005d7fac410bea6c79da24e7cfc,"Mauriac, François, 1885-",25,1,1
+da9f46bded910661da77525a11e1482f,"Zhu, Xi, 1130-1200 朱熹， 1130-1200",32,1,1
+60428f0bfbb327fba8ace66690079fcc,"Joyce, James, 1882-1941, Criticism and interpretation",53,1,1

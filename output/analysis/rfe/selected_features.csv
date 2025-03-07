@@ -1,0 +1,8 @@
+feature
+composite_cosine
+person_cosine
+person_levenshtein
+person_title_harmonic
+title_subjects_harmonic
+provision_subjects_harmonic
+person_subjects_product

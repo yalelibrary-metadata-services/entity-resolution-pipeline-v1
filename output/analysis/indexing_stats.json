@@ -1,0 +1,11 @@
+{
+  "indexed": true,
+  "total_objects": 14676,
+  "field_type_counts": {
+    "composite": 4514,
+    "title": 3598,
+    "provision": 3328,
+    "subjects": 2918,
+    "person": 318
+  }
+}

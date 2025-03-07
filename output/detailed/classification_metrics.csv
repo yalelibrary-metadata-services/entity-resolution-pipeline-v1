@@ -1,0 +1,10 @@
+metric,value
+train_metrics_iteration,716
+train_metrics_loss,0.44396010504458344
+train_metrics_precision,0.932433820759563
+train_metrics_recall,1.0
+train_metrics_f1,0.965035708589555
+train_metrics_val_loss,0.4465880164107356
+test_metrics_precision,0.9215311004784689
+test_metrics_recall,1.0
+test_metrics_f1,0.9591633466135459

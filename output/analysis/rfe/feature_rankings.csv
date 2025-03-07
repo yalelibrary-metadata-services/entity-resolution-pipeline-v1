@@ -1,0 +1,16 @@
+feature,rank,selected
+composite_cosine,1,True
+person_cosine,1,True
+person_levenshtein,1,True
+person_title_harmonic,1,True
+title_subjects_harmonic,1,True
+provision_subjects_harmonic,1,True
+person_subjects_product,1,True
+person_provision_harmonic,2,False
+subjects_cosine,3,False
+provision_cosine,4,False
+person_subjects_harmonic,5,False
+title_cosine,6,False
+composite_subjects_ratio,7,False
+title_provision_harmonic,8,False
+birth_death_year_match,9,False

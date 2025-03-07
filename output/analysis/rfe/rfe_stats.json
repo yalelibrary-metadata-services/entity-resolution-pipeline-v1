@@ -1,0 +1,101 @@
+{
+  "total_features": 15,
+  "selected_features": 7,
+  "selection_ratio": 0.4666666666666667,
+  "feature_rankings": [
+    {
+      "feature": "composite_cosine",
+      "rank": 1,
+      "selected": true
+    },
+    {
+      "feature": "person_cosine",
+      "rank": 1,
+      "selected": true
+    },
+    {
+      "feature": "person_levenshtein",
+      "rank": 1,
+      "selected": true
+    },
+    {
+      "feature": "person_title_harmonic",
+      "rank": 1,
+      "selected": true
+    },
+    {
+      "feature": "title_subjects_harmonic",
+      "rank": 1,
+      "selected": true
+    },
+    {
+      "feature": "provision_subjects_harmonic",
+      "rank": 1,
+      "selected": true
+    },
+    {
+      "feature": "person_subjects_product",
+      "rank": 1,
+      "selected": true
+    },
+    {
+      "feature": "person_provision_harmonic",
+      "rank": 2,
+      "selected": false
+    },
+    {
+      "feature": "subjects_cosine",
+      "rank": 3,
+      "selected": false
+    },
+    {
+      "feature": "provision_cosine",
+      "rank": 4,
+      "selected": false
+    },
+    {
+      "feature": "person_subjects_harmonic",
+      "rank": 5,
+      "selected": false
+    },
+    {
+      "feature": "title_cosine",
+      "rank": 6,
+      "selected": false
+    },
+    {
+      "feature": "composite_subjects_ratio",
+      "rank": 7,
+      "selected": false
+    },
+    {
+      "feature": "title_provision_harmonic",
+      "rank": 8,
+      "selected": false
+    },
+    {
+      "feature": "birth_death_year_match",
+      "rank": 9,
+      "selected": false
+    }
+  ],
+  "important_features": [
+    "composite_cosine",
+    "person_cosine",
+    "person_levenshtein",
+    "person_title_harmonic",
+    "title_subjects_harmonic",
+    "provision_subjects_harmonic",
+    "person_subjects_product"
+  ],
+  "eliminated_features": [
+    "person_provision_harmonic",
+    "subjects_cosine",
+    "provision_cosine",
+    "person_subjects_harmonic",
+    "title_cosine",
+    "composite_subjects_ratio",
+    "title_provision_harmonic",
+    "birth_death_year_match"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "total_matches": 1687,
+  "total_entities_with_matches": 600,
+  "confidence_distribution": {
+    "min": 0.7500569566820873,
+    "max": 0.882425476814235,
+    "mean": 0.7933931500001343,
+    "median": 0.7850739835966039,
+    "threshold": 0.75
+  },
+  "entity_match_stats": {
+    "max_matches_per_entity": 48,
+    "avg_matches_per_entity": 5.623333333333333,
+    "median_matches_per_entity": 3.0
+  },
+  "confidence_histogram": {
+    "bins": [
+      0.0,
+      0.05,
+      0.1,
+      0.15000000000000002,
+      0.2,
+      0.25,
+      0.30000000000000004,
+      0.35000000000000003,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6000000000000001,
+      0.65,
+      0.7000000000000001,
+      0.75,
+      0.8,
+      0.8500000000000001,
+      0.9,
+      0.9500000000000001,
+      1.0
+    ],
+    "counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1034,
+      546,
+      107,
+      0,
+      0
+    ]
+  },
+  "feature_importance": {
+    "composite_cosine": 0.07023269283392988,
+    "person_cosine": 0.2111708501175648,
+    "title_cosine": 0.010117599885570771,
+    "provision_cosine": 0.00026252594344485165,
+    "subjects_cosine": 0.05259856037927923,
+    "person_levenshtein": 0.17060690384844227,
+    "person_title_harmonic": 0.06803388020701218,
+    "person_provision_harmonic": 0.0835702237985779,
+    "person_subjects_harmonic": 0.09545612547717292,
+    "title_subjects_harmonic": 0.04288112581793532,
+    "title_provision_harmonic": 0.01896830128976662,
+    "provision_subjects_harmonic": 0.036683056572151776,
+    "person_subjects_product": 0.13659903583458516,
+    "composite_subjects_ratio": 0.0028191179945662565
+  }
+}

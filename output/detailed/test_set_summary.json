@@ -1,0 +1,13 @@
+{
+  "total_test_samples": 15519,
+  "correctly_classified": 13193,
+  "misclassified": 2326,
+  "accuracy": 0.8501192087119015,
+  "true_negatives": 7815,
+  "true_positives": 5378,
+  "false_positives": 0,
+  "false_negatives": 2326,
+  "precision": 1.0,
+  "recall": 0.6980789200415368,
+  "f1": 0.822198440605412
+}
