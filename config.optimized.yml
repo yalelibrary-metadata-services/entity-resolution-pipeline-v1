@@ -115,6 +115,12 @@ batch_processing:
   monitoring_interval: 30   # Memory monitoring interval in seconds
   adaptive_batch_sizing: true # Adapt batch size based on memory usage
 
+imputation:
+  enabled: true             # Enable null value imputation
+  neighbors: 10             # Number of nearest neighbors for imputation
+  min_similarity: 0.3       # Minimum similarity threshold for imputation
+  similarity_weight_decay: 0.9 # Weight decay for averaging by similarity
+
 # Feature engineering settings
 features:
   # Basic similarity features

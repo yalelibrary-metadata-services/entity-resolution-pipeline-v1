@@ -401,12 +401,19 @@ class ParallelFeatureExtractor:
     
     def _harmonic_mean(self, a, b):
         """Compute harmonic mean with better handling of very small values"""
-        if a <= 0.001 or b <= 0.001:
-            # For very small values, use a minimum threshold or weighted average
-            min_threshold = 0.001
-            a_adjusted = max(a, min_threshold)
-            b_adjusted = max(b, min_threshold)
-            return 2 * a_adjusted * b_adjusted / (a_adjusted + b_adjusted)
+        # Set a minimum threshold to avoid division by near-zero
+        min_threshold = 0.001
+        
+        if a <= min_threshold or b <= min_threshold:
+            # For very small values, use a weighted average instead
+            if a <= min_threshold and b <= min_threshold:
+                return 0.0  # Both values are essentially zero
+            elif a <= min_threshold:
+                return b * 0.1  # Return a fraction of the non-zero value
+            else:
+                return a * 0.1  # Return a fraction of the non-zero value
+        
+        # Normal harmonic mean for non-zero values
         return 2 * a * b / (a + b)
     
     def _extract_birth_death_years(self, person_string):

@@ -18,6 +18,7 @@ import contextlib
 import tempfile
 import threading
 from functools import lru_cache
+from weaviate.classes.query import Filter, MetadataQuery
 
 # Define type variable for generics
 T = TypeVar('T')
@@ -504,3 +505,153 @@ class DiskBackedQueue:
     def __del__(self) -> None:
         """Clean up disk files when object is deleted"""
         self.clear()
+
+def diagnose_imputation_issues(query_engine, field_to_diagnose="subjects"):
+        """Diagnose why imputation is failing for a specific field"""
+        import pandas as pd
+        import time
+        
+        logger.info(f"========== IMPUTATION DIAGNOSTIC FOR {field_to_diagnose} ==========")
+        
+        # Step 1: Check if field exists in database
+        logger.info("Step 1: Checking field existence in database...")
+        try:
+            from weaviate.classes.aggregate import GroupByAggregate
+            from weaviate.classes.query import Filter
+            
+            # Get total count first
+            total_count_result = query_engine.collection.aggregate.over_all(
+                total_count=True
+            )
+            total_count = total_count_result.total_count
+            logger.info(f"Total objects in collection: {total_count}")
+            
+            # Count objects by field_type
+            field_type_result = query_engine.collection.aggregate.over_all(
+                group_by=GroupByAggregate(prop="field_type"),
+                total_count=True
+            )
+            
+            field_counts = {}
+            for group in field_type_result.groups:
+                field_type = group.grouped_by.value
+                count = group.total_count
+                field_counts[field_type] = count
+                
+            # Print results
+            df = pd.DataFrame(list(field_counts.items()), columns=['field_type', 'count'])
+            df = df.sort_values('count', ascending=False)
+            logger.info(f"Field type distribution:\n{df.to_string(index=False)}")
+            
+            # Check specific field
+            if field_to_diagnose in field_counts:
+                logger.info(f"Field '{field_to_diagnose}' exists with {field_counts[field_to_diagnose]} objects")
+            else:
+                logger.error(f"Field '{field_to_diagnose}' does not exist in database!")
+                logger.error("This is why imputation is failing - no data to draw from!")
+                return False
+                
+            # Step 2: Check if field can be queried at all (with lower threshold)
+            logger.info("\nStep 2: Testing field query with minimal filters...")
+            
+            # Get a sample vector to query with
+            sample_field = next((f for f in field_counts.keys() if field_counts[f] > 0), None)
+            if not sample_field:
+                logger.error("No fields with data found!")
+                return False
+                
+            # Get a sample vector
+            sample_result = query_engine.collection.query.fetch_objects(
+                filters=Filter.by_property("field_type").equal(sample_field),
+                limit=1,
+                include_vector=True
+            )
+            
+            if not sample_result.objects:
+                logger.error("No objects found for sample query!")
+                return False
+                
+            sample_vector = sample_result.objects[0].vector.get("text_vector")
+            if not sample_vector:
+                logger.error("No vector found in sample object!")
+                return False
+                
+            # Try to query the target field with very low threshold
+            logger.info(f"Querying '{field_to_diagnose}' with threshold 0.1...")
+            
+            # Direct query to see raw results before applying threshold
+            field_filter = Filter.by_property("field_type").equal(field_to_diagnose)
+            raw_results = query_engine.collection.query.near_vector(
+                near_vector=sample_vector,
+                limit=5,
+                return_metadata=MetadataQuery(distance=True),
+                include_vector=True,
+                filters=field_filter
+            )
+            
+            if not raw_results.objects:
+                logger.error(f"No raw results found for {field_to_diagnose} - field exists but can't be queried!")
+                return False
+                
+            # Print distances to see what's happening
+            logger.info("Raw query results:")
+            for i, obj in enumerate(raw_results.objects):
+                similarity = 1.0 - obj.metadata.distance
+                logger.info(f"  Result {i+1}: Similarity = {similarity:.4f}, Distance = {obj.metadata.distance:.4f}")
+                
+            # Step 3: Test different thresholds
+            logger.info("\nStep 3: Testing different similarity thresholds...")
+            
+            for threshold in [0.1, 0.3, 0.5, 0.7, 0.9]:
+                filtered_results = [obj for obj in raw_results.objects if 1.0 - obj.metadata.distance >= threshold]
+                logger.info(f"Threshold {threshold}: {len(filtered_results)} results pass")
+                
+            # Determine optimal threshold
+            all_similarities = [1.0 - obj.metadata.distance for obj in raw_results.objects]
+            if all_similarities:
+                avg_similarity = sum(all_similarities) / len(all_similarities)
+                suggested_threshold = max(0.1, avg_similarity - 0.2)  # Set threshold 0.2 below average
+                logger.info(f"Suggested similarity threshold for {field_to_diagnose}: {suggested_threshold:.2f}")
+            
+            # Step 4: Verify specific example
+            logger.info("\nStep 4: Testing imputation query directly...")
+            
+            # Sample 5 composite vectors to test
+            composite_results = query_engine.collection.query.fetch_objects(
+                filters=Filter.by_property("field_type").equal("composite"),
+                limit=5,
+                include_vector=True
+            )
+            
+            if composite_results.objects:
+                for i, obj in enumerate(composite_results.objects[:3]):  # Test first 3
+                    composite_vector = obj.vector.get("text_vector")
+                    composite_text = obj.properties.get("text", "")[:100]  # First 100 chars
+                    
+                    logger.info(f"\nTesting composite {i+1}: {composite_text}...")
+                    
+                    # Try query with this vector
+                    test_results = query_engine.collection.query.near_vector(
+                        near_vector=composite_vector,
+                        limit=3,
+                        return_metadata=MetadataQuery(distance=True),
+                        include_vector=True,
+                        filters=field_filter
+                    )
+                    
+                    if test_results.objects:
+                        best_similarity = 1.0 - test_results.objects[0].metadata.distance
+                        logger.info(f"Found {len(test_results.objects)} results, best similarity: {best_similarity:.4f}")
+                        
+                        # Is it good enough for current threshold?
+                        current_threshold = query_engine.min_similarity
+                        logger.info(f"Would pass current threshold ({current_threshold})? {best_similarity >= current_threshold}")
+                    else:
+                        logger.info("No results found for this composite")
+            
+            logger.info("\n===== DIAGNOSIS COMPLETE =====")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during diagnosis: {e}", exc_info=True)
+            return False

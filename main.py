@@ -26,6 +26,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 # Import pipeline modules
 from src.pipeline import Pipeline
 from src.utils import setup_logging, setup_monitoring
+from src.utils_enhancement import diagnose_imputation_issues
 
 # Load environment variables from .env file
 load_dotenv()
@@ -150,6 +151,7 @@ def main(config, stage, mode, reset):
         try:
             if stage == 'all':
                 print_header("Running Full Pipeline")
+                
                 for current_stage in pipeline_stages:
                     stage_start_time = time.time()
                     

@@ -1,0 +1,122 @@
+sequenceDiagram
+    participant User
+    participant Pipeline
+    participant Preprocessor
+    participant Embedder
+    participant OpenAI
+    participant Indexer
+    participant Weaviate
+    participant Imputer
+    participant QueryEngine
+    participant FeatureExtractor
+    participant Classifier
+    participant Clusterer
+    participant Reporter
+    
+    User->>Pipeline: Execute pipeline
+    activate Pipeline
+    
+    %% Preprocessing Stage
+    Pipeline->>Preprocessor: Process input data
+    activate Preprocessor
+    Preprocessor->>Preprocessor: Parse CSV files
+    Preprocessor->>Preprocessor: Deduplicate strings
+    Preprocessor->>Preprocessor: Compute field hashes
+    Preprocessor->>Preprocessor: Track string frequencies
+    Preprocessor-->>Pipeline: Return unique strings & mappings
+    deactivate Preprocessor
+    
+    %% Embedding Stage
+    Pipeline->>Embedder: Generate embeddings
+    activate Embedder
+    Embedder->>Embedder: Check embedding cache
+    Embedder->>OpenAI: Request embeddings for unique strings
+    OpenAI-->>Embedder: Return embedding vectors
+    Embedder->>Embedder: Cache embeddings
+    Embedder-->>Pipeline: Return embeddings
+    deactivate Embedder
+    
+    %% Indexing Stage
+    Pipeline->>Indexer: Index embeddings
+    activate Indexer
+    Indexer->>Weaviate: Create/update collection
+    Indexer->>Weaviate: Batch index vectors & metadata
+    Weaviate-->>Indexer: Confirm indexing
+    Indexer-->>Pipeline: Return indexing status
+    deactivate Indexer
+    
+    %% Training Stage
+    Pipeline->>Classifier: Train classifier
+    activate Classifier
+    Classifier->>Preprocessor: Load ground truth data
+    Preprocessor-->>Classifier: Return labeled pairs
+    
+    loop For each record pair
+        Classifier->>Imputer: Impute missing values
+        activate Imputer
+        Imputer->>QueryEngine: Query similar records
+        QueryEngine->>Weaviate: Execute vector similarity search
+        Weaviate-->>QueryEngine: Return similar records
+        QueryEngine-->>Imputer: Return query results
+        Imputer-->>Classifier: Return complete records
+        deactivate Imputer
+        
+        Classifier->>FeatureExtractor: Extract features
+        activate FeatureExtractor
+        FeatureExtractor->>QueryEngine: Get vectors
+        QueryEngine->>Weaviate: Execute vector queries
+        Weaviate-->>QueryEngine: Return vectors
+        QueryEngine-->>FeatureExtractor: Return vectors
+        FeatureExtractor-->>Classifier: Return feature vector
+        deactivate FeatureExtractor
+    end
+    
+    Classifier->>Classifier: Train logistic regression
+    Classifier->>Classifier: Evaluate performance
+    Classifier-->>Pipeline: Return trained model
+    deactivate Classifier
+    
+    %% Classification Stage
+    Pipeline->>Classifier: Run classification
+    activate Classifier
+    
+    loop For each person
+        Classifier->>QueryEngine: Find candidates
+        QueryEngine->>Weaviate: Execute ANN search
+        Weaviate-->>QueryEngine: Return candidate matches
+        QueryEngine-->>Classifier: Return candidates
+        
+        loop For each candidate
+            Classifier->>Imputer: Impute missing values
+            Imputer-->>Classifier: Return complete records
+            
+            Classifier->>FeatureExtractor: Extract features
+            FeatureExtractor-->>Classifier: Return feature vector
+            
+            Classifier->>Classifier: Predict match probability
+        end
+    end
+    
+    Classifier-->>Pipeline: Return match pairs
+    deactivate Classifier
+    
+    %% Clustering Stage
+    Pipeline->>Clusterer: Cluster matches
+    activate Clusterer
+    Clusterer->>Clusterer: Build entity graph
+    Clusterer->>Clusterer: Apply community detection
+    Clusterer->>Clusterer: Filter clusters
+    Clusterer-->>Pipeline: Return entity clusters
+    deactivate Clusterer
+    
+    %% Reporting Stage
+    Pipeline->>Reporter: Generate reports
+    activate Reporter
+    Reporter->>Reporter: Generate summary report
+    Reporter->>Reporter: Create visualizations
+    Reporter->>Reporter: Save detailed reports
+    Reporter-->>Pipeline: Return report status
+    deactivate Reporter
+    
+    Pipeline-->>User: Return completion status
+    deactivate Pipeline

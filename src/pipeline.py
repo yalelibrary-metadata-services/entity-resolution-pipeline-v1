@@ -144,6 +144,16 @@ class Pipeline:
                     self.embedder.get_embeddings()
                 )
                 save_checkpoint(checkpoint_path, self.indexer.get_state())
+            
+            # Important: Set the collection in the query engine
+            logger.info("Setting collection in query engine after indexing")
+            self.query_engine.set_collection(self.indexer.get_collection())
+            
+            # Run diagnostics if imputation is enabled
+            if self.config['imputation']['enabled']:
+                from .utils_enhancement import diagnose_imputation_issues
+                logger.info("Running imputation diagnostics after indexing...")
+                diagnose_imputation_issues(self.query_engine, "subjects")
         
         logger.info(f"Indexing completed in {timer.elapsed:.2f} seconds")
         

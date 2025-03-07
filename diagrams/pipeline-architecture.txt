@@ -1,0 +1,55 @@
+flowchart LR
+    subgraph "Data Processing"
+        direction TB
+        A[Input CSV Files] --> B[Preprocessor]
+        B --> C[Unique Strings]
+        B --> D[Record Mappings]
+        C --> E[Embedder]
+        E --> F[Vector Embeddings]
+        F --> G[Weaviate Indexer]
+        G --> H[Vector Index]
+    end
+    
+    subgraph "Training"
+        direction TB
+        I[Ground Truth Data] --> J[Feature Extractor]
+        J --> K[Feature Vectors]
+        K --> L[Classifier Training]
+        L --> M[Classification Model]
+    end
+    
+    subgraph "Classification"
+        direction TB
+        N[Person IDs] --> O[Query Engine]
+        O --> P[Match Candidates]
+        P --> Q[Feature Extraction]
+        Q --> R[Match Prediction]
+        R --> S[Match Pairs]
+    end
+    
+    subgraph "Clustering"
+        direction TB
+        T[Match Pairs] --> U[Graph Builder]
+        U --> V[Entity Graph]
+        V --> W[Community Detection]
+        W --> X[Entity Clusters]
+    end
+    
+    subgraph "Reporting"
+        direction TB
+        Y[Summary Report] --- Z[Visualizations]
+        Z --- AA[Detailed Reports]
+    end
+    
+    H -.-> O
+    D -.-> N
+    M -.-> R
+    S --> T
+    X --> Y
+    
+    %% External Services
+    OpenAI[OpenAI API] -.-> E
+    
+    %% Imputation Flow
+    Imputation[Null Value Imputation] -.-> Q
+    H -.-> Imputation
