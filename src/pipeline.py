@@ -262,13 +262,18 @@ class Pipeline:
                     if len(valid_indices) == len(feature_vectors):
                         print("Successfully identified failing extractions")
                         adjusted_labels = [labels[i] for i in valid_indices]
+                        
+                        # Create record pairs list for successfully extracted features
+                        successful_pairs = [record_pairs[valid_indices[i]] for i in range(len(valid_indices))]
                     else:
                         print("Warning: Could not precisely identify failing extractions.")
                         print(f"Expected {len(feature_vectors)} valid indices but found {len(valid_indices)}")
                         print("Using first N labels as a fallback (may introduce label misalignment)")
                         adjusted_labels = labels[:len(feature_vectors)]
+                        successful_pairs = record_pairs[:len(feature_vectors)]
                 else:
                     adjusted_labels = labels
+                    successful_pairs = record_pairs
                 
                 # Convert to numpy array for training
                 X = np.array(feature_vectors)
@@ -288,9 +293,9 @@ class Pipeline:
                         print(f"Using {X.shape[1]} features selected by RFE")
                         logger.info(f"Using {X.shape[1]} features selected by RFE")
                 
-                # Train classifier
+                # Train classifier with record pairs for enhanced reporting
                 print("Starting classifier training")
-                self.classifier.train(X, y, self.feature_extractor.get_feature_names())
+                self.classifier.train(X, y, self.feature_extractor.get_feature_names(), successful_pairs)
                 
                 print("Saving checkpoint")
                 save_checkpoint(checkpoint_path, self.classifier.get_state())
@@ -371,8 +376,9 @@ class Pipeline:
         
         logger.info(f"Classification completed in {timer.elapsed:.2f} seconds")
         
-        # Run analysis on classification results
-        self.analyzer.analyze_classification(self.classifier)
+        # Run analysis on classification results - FIXED VERSION
+        # Pass the feature_extractor as an additional parameter
+        self.analyzer.analyze_classification(self.classifier, self.feature_extractor)
     
     def run_clustering(self, reset=False):
         """Run the clustering stage"""

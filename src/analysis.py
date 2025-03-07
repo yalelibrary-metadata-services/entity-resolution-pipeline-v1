@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from collections import Counter, defaultdict
+import networkx as nx
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import (
@@ -445,9 +446,10 @@ class Analyzer:
                 collection = indexer.get_collection()
                 
                 # Get total count
-                total_count = collection.aggregate.over_all(
+                total_count_result = collection.aggregate.over_all(
                     total_count=True
-                ).total_count
+                )
+                total_count = total_count_result.total_count
                 
                 # Get counts by field type
                 from weaviate.classes.aggregate import GroupByAggregate
@@ -466,23 +468,68 @@ class Analyzer:
                 stats['total_objects'] = total_count
                 stats['field_type_counts'] = field_counts
                 
-                # Get frequency statistics
+                # Get frequency statistics using multiple queries instead of 'fields' parameter
                 try:
-                    frequency_result = collection.aggregate.over_all(
-                        fields=["frequency"],
-                        group_by=GroupByAggregate(prop="field_type")
-                    )
-                    
                     frequency_stats = {}
-                    for group in frequency_result.groups:
-                        field_type = group.grouped_by.value
-                        if hasattr(group, 'fields') and group.fields:
-                            freq = group.fields.get('frequency', {})
-                            frequency_stats[field_type] = {
-                                'mean': freq.get('mean', 0),
-                                'sum': freq.get('sum', 0),
-                                'count': freq.get('count', 0)
-                            }
+                    
+                    # Get stats for each field type separately
+                    for field_type in field_counts.keys():
+                        # Use a filter to get only objects of this field_type
+                        from weaviate.classes.query import Filter, Metrics
+                        from weaviate.classes.aggregate import GroupByAggregate
+                        
+                        
+                        field_filter = "frequency" #Filter.by_property("field_type").equal(field_type)
+                        
+                        # Perform the aggregate query to get the mean frequency
+                                            
+                        # Get mean frequency
+                        try:
+                            mean_result = collection.aggregate.over_all(
+                                group_by=field_filter,
+                                total_count=True,
+                                return_metrics=Metrics(field_filter).number(mean=True)
+                            )
+
+                            mean_values = [group.properties[field_filter].mean for group in mean_result.groups if group.properties[field_filter].mean is not None]
+                            
+
+                            if mean_values is None:
+                                logger.warning(f"No valid mean frequency values found for {field_type}.")
+                        except Exception as e:
+                            logger.warning(f"Could not get mean frequency for {field_type}: {e}")
+                            mean_value = None
+                        
+                        # Get max frequency
+                        try:
+                            max_result = collection.aggregate.over_all(
+                                group_by=GroupByAggregate(prop=field_filter),
+                                total_count=True,
+                                return_metrics=Metrics(field_filter).integer(maximum=True)
+                            )
+                            max_values = [group.properties[field_filter].maximum for group in max_result.groups if group.properties[field_filter].maximum is not None]
+                        except Exception as e:
+                            logger.warning(f"Could not get max frequency for {field_type}: {e}")
+                            max_value = None
+                        
+                        # Get min frequency
+                        try:
+                            min_result = collection.aggregate.over_all(
+                                group_by=GroupByAggregate(prop=field_filter),
+                                total_count=True,
+                                return_metrics=Metrics(field_filter).integer(minimum=True)
+                            )
+                            min_values = [group.properties[field_filter].minimum for group in min_result.groups if group.properties[field_filter].minimum is not None]
+                        except Exception as e:
+                            logger.warning(f"Could not get min frequency for {field_type}: {e}")
+                            min_value = None
+                        
+                        frequency_stats[field_type] = {
+                            'mean': mean_value,
+                            'min': min_value,
+                            'max': max_value,
+                            'count': field_counts[field_type]
+                        }
                     
                     stats['frequency_statistics'] = frequency_stats
                 except Exception as e:
@@ -535,7 +582,7 @@ class Analyzer:
                 # Pie chart for field distribution
                 plt.figure(figsize=(10, 10))
                 plt.pie(counts, labels=fields, autopct='%1.1f%%', 
-                       startangle=90, colors=colors)
+                    startangle=90, colors=colors)
                 plt.title('Field Type Distribution', fontsize=14)
                 plt.tight_layout()
                 plt.savefig(self.output_dir / 'field_type_pie.png', dpi=300)
@@ -550,13 +597,15 @@ class Analyzer:
                     
                     fields = list(frequency_stats.keys())
                     means = [frequency_stats[field].get('mean', 0) for field in fields]
+                    means = [mean if mean is not None else 0 for mean in means]
                     
                     plt.bar(fields, means, color=sns.color_palette("viridis", len(fields)))
                     
                     # Add mean labels on top of each bar
                     for i, v in enumerate(means):
-                        plt.text(i, v + max(means) * 0.01, f"{v:.2f}", 
-                                ha='center', va='bottom', fontsize=10)
+                        if v is not None:
+                            plt.text(i, v + max(filter(None, means)) * 0.01, f"{v:.2f}", 
+                                    ha='center', va='bottom', fontsize=10)
                     
                     plt.title('Mean Frequency by Field Type', fontsize=14)
                     plt.xlabel('Field Type', fontsize=12)
@@ -567,16 +616,210 @@ class Analyzer:
                     plt.tight_layout()
                     plt.savefig(self.output_dir / 'field_frequency_stats.png', dpi=300)
                     plt.close()
+                    
+                    # Create a min/max/mean chart
+                    plt.figure(figsize=(14, 7))
+                    
+                    x = np.arange(len(fields))
+                    width = 0.25
+                    
+                    # Filter out None values
+                    mins = [frequency_stats[field].get('min', 0) for field in fields]
+                    mins = [min_val if min_val is not None else 0 for min_val in mins]
+                    
+                    maxs = [frequency_stats[field].get('max', 0) for field in fields]
+                    maxs = [max_val if max_val is not None else 0 for max_val in maxs]
+                    
+                    plt.bar(x - width, mins, width, label='Min', color='lightblue')
+                    plt.bar(x, means, width, label='Mean', color='skyblue')
+                    plt.bar(x + width, maxs, width, label='Max', color='steelblue')
+                    
+                    plt.title('Frequency Statistics by Field Type', fontsize=14)
+                    plt.xlabel('Field Type', fontsize=12)
+                    plt.ylabel('Frequency', fontsize=12)
+                    plt.xticks(x, fields, rotation=45)
+                    plt.legend()
+                    plt.grid(axis='y', linestyle='--', alpha=0.7)
+                    
+                    plt.tight_layout()
+                    plt.savefig(self.output_dir / 'field_frequency_min_max_mean.png', dpi=300)
+                    plt.close()
         
         except Exception as e:
             logger.error(f"Error generating indexing visualizations: {e}")
     
-    def analyze_classification(self, classifier, feature_extractor, X_test=None, y_test=None, feature_names=None):
+    def analyze_rfe_results(self, feature_extractor):
+        """Analyze Recursive Feature Elimination results with comprehensive reporting"""
+        with Timer() as timer:
+            logger.info("Analyzing RFE results")
+            
+            if not feature_extractor.rfe_enabled:
+                logger.info("RFE is not enabled in configuration, skipping analysis")
+                return
+            
+            if feature_extractor.rfe_model is None:
+                logger.warning("No RFE model available for analysis")
+                return
+            
+            # Get results from feature extractor
+            rfe_results = feature_extractor.get_rfe_results()
+            if not rfe_results:
+                logger.warning("No RFE results available")
+                return
+            
+            # Create RFE directory
+            rfe_dir = self.output_dir / 'rfe'
+            ensure_dir(rfe_dir)
+            
+            # Basic statistics
+            stats = {
+                'total_features': len(feature_extractor.feature_names),
+                'selected_features': len(rfe_results['selected_features']),
+                'selection_ratio': len(rfe_results['selected_features']) / len(feature_extractor.feature_names)
+            }
+            
+            # Add feature rankings
+            feature_rankings = rfe_results['feature_rankings']
+            sorted_rankings = sorted(feature_rankings, key=lambda x: x['rank'])
+            
+            stats['feature_rankings'] = sorted_rankings
+            stats['important_features'] = [f['feature'] for f in sorted_rankings if f['selected']]
+            stats['eliminated_features'] = [f['feature'] for f in sorted_rankings if not f['selected']]
+            
+            # Save statistics to JSON
+            with open(rfe_dir / 'rfe_stats.json', 'w') as f:
+                json.dump(stats, f, indent=2)
+            
+            # Generate CSV reports
+            self._generate_rfe_csv_reports(rfe_results, rfe_dir)
+            
+            # Store RFE results for later use
+            self.rfe_analysis = {
+                'stats': stats,
+                'results': rfe_results
+            }
+            
+            # Generate visualizations if enabled
+            if self.visualizations_enabled:
+                self._visualize_rfe_results(rfe_results, rfe_dir)
+            
+            logger.info(f"RFE analysis completed")
+        
+        logger.info(f"RFE analysis time: {timer.elapsed:.2f} seconds")
+
+    def _generate_rfe_csv_reports(self, rfe_results, output_dir):
+        """Generate detailed CSV reports for RFE analysis"""
+        # Feature rankings CSV
+        if 'feature_rankings' in rfe_results:
+            rankings = rfe_results['feature_rankings']
+            rankings_df = pd.DataFrame(rankings)
+            rankings_df.sort_values('rank', inplace=True)
+            rankings_df.to_csv(output_dir / 'feature_rankings.csv', index=False)
+        
+        # Selected features CSV
+        if 'selected_features' in rfe_results:
+            selected = rfe_results['selected_features']
+            selected_df = pd.DataFrame({'feature': selected})
+            selected_df.to_csv(output_dir / 'selected_features.csv', index=False)
+
+    def _visualize_rfe_results(self, rfe_results, output_dir):
+        """Generate comprehensive visualizations for RFE results"""
+        try:
+            # 1. Feature Ranking Visualization
+            if 'feature_rankings' in rfe_results:
+                rankings = rfe_results['feature_rankings']
+                rankings_sorted = sorted(rankings, key=lambda x: x['rank'])
+                
+                features = [r['feature'] for r in rankings_sorted]
+                ranks = [r['rank'] for r in rankings_sorted]
+                selected = [r['selected'] for r in rankings_sorted]
+                
+                # Use two colors: one for selected, one for eliminated
+                colors = ['#4CAF50' if s else '#F44336' for s in selected]
+                
+                plt.figure(figsize=(12, 10))
+                
+                # Create horizontal bar chart with colored bars
+                bars = plt.barh(features, ranks, color=colors)
+                
+                plt.title('Feature Ranking by RFE (Lower Rank = More Important)', fontsize=16)
+                plt.xlabel('Rank', fontsize=14)
+                plt.ylabel('Feature', fontsize=14)
+                
+                # Add legend
+                from matplotlib.patches import Patch
+                legend_elements = [
+                    Patch(facecolor='#4CAF50', label='Selected'),
+                    Patch(facecolor='#F44336', label='Eliminated')
+                ]
+                plt.legend(handles=legend_elements, fontsize=12)
+                
+                plt.grid(axis='x', linestyle='--', alpha=0.7)
+                plt.tight_layout()
+                
+                plt.savefig(output_dir / 'feature_ranking.png', dpi=300)
+                plt.close()
+                
+                # 2. Selected vs Eliminated Features
+                if 'selected_features' in rfe_results:
+                    selected_features = rfe_results['selected_features']
+                    total_features = len(rankings)
+                    eliminated_features = total_features - len(selected_features)
+                    
+                    plt.figure(figsize=(10, 6))
+                    
+                    plt.bar(['Selected', 'Eliminated'], [len(selected_features), eliminated_features], 
+                        color=['#4CAF50', '#F44336'])
+                    
+                    # Add count and percentage labels
+                    selected_pct = len(selected_features) / total_features * 100
+                    eliminated_pct = eliminated_features / total_features * 100
+                    
+                    plt.text(0, len(selected_features)/2, f"{len(selected_features)} ({selected_pct:.1f}%)", 
+                        ha='center', va='center', color='white', fontweight='bold')
+                    
+                    plt.text(1, eliminated_features/2, f"{eliminated_features} ({eliminated_pct:.1f}%)", 
+                        ha='center', va='center', color='white', fontweight='bold')
+                    
+                    plt.title('Feature Selection Summary', fontsize=16)
+                    plt.ylabel('Number of Features', fontsize=14)
+                    plt.grid(axis='y', linestyle='--', alpha=0.7)
+                    
+                    plt.tight_layout()
+                    plt.savefig(output_dir / 'feature_selection_summary.png', dpi=300)
+                    plt.close()
+                    
+                # 3. Ranking Distribution
+                plt.figure(figsize=(10, 6))
+                
+                plt.hist(ranks, bins=10, color='skyblue', edgecolor='black', alpha=0.7)
+                
+                # Add vertical line for selection threshold (if we can determine it)
+                if selected and any(selected):
+                    # Find the highest rank among selected features
+                    max_selected_rank = max([r['rank'] for r in rankings if r['selected']])
+                    plt.axvline(x=max_selected_rank, color='green', linestyle='--', 
+                            label=f'Selection Threshold (Rank {max_selected_rank})')
+                    plt.legend(fontsize=12)
+                
+                plt.title('Feature Ranking Distribution', fontsize=16)
+                plt.xlabel('Rank', fontsize=14)
+                plt.ylabel('Number of Features', fontsize=14)
+                plt.grid(linestyle='--', alpha=0.7)
+                
+                plt.tight_layout()
+                plt.savefig(output_dir / 'ranking_distribution.png', dpi=300)
+                plt.close()
+        
+        except Exception as e:
+            logger.error(f"Error generating RFE visualizations: {e}", exc_info=True)
+
+    def analyze_classification(self, classifier, feature_extractor=None, X_test=None, y_test=None, feature_names=None):
         """Analyze classification results with comprehensive feature analysis
         
         Args:
             classifier: Trained classifier instance
-            feature_extractor: Feature extractor instance
+            feature_extractor: Optional feature extractor instance
             X_test: Optional test set feature vectors
             y_test: Optional test set labels
             feature_names: Optional feature names
@@ -754,6 +997,10 @@ class Analyzer:
             # Generate visualizations if enabled
             if self.visualizations_enabled:
                 self._visualize_classification_stats(stats, X_test, y_test, feature_names)
+
+             # Analyze RFE results if feature_extractor is provided and RFE is enabled
+            if feature_extractor and feature_extractor.rfe_enabled and feature_extractor.rfe_model is not None:
+                self.analyze_rfe_results(feature_extractor)
             
             logger.info(f"Classification analysis completed")
         

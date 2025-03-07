@@ -16,6 +16,8 @@ import threading
 from scipy.spatial.distance import cosine
 import Levenshtein
 from weaviate.classes.query import Filter, MetadataQuery  # Add this import
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
 
 from .utils import Timer, compute_vector_similarity, compute_levenshtein_similarity
 
@@ -483,3 +485,76 @@ class ParallelFeatureExtractor:
         
         if hasattr(self.thread_local, 'string_cache'):
             self.thread_local.string_cache = {}
+
+    def train_rfe(self, X, y):
+        """Train Recursive Feature Elimination model"""
+        if not self.rfe_enabled:
+            logger.info("RFE is disabled in configuration")
+            return
+        
+        logger.info("Training Recursive Feature Elimination model")
+        
+        # Create base estimator (LogisticRegression)
+        estimator = LogisticRegression(
+            solver='liblinear', 
+            max_iter=1000, 
+            random_state=42
+        )
+        
+        # Create RFE model
+        n_features = X.shape[1]
+        n_features_to_select = max(1, int(n_features / 2))  # Select half by default
+        
+        rfe = RFE(
+            estimator=estimator,
+            n_features_to_select=n_features_to_select,
+            step=self.rfe_step,
+            verbose=1
+        )
+        
+        # Fit RFE model
+        rfe.fit(X, y)
+        
+        # Get selected features
+        selected_indices = np.where(rfe.support_)[0]
+        selected_features = [self.feature_names[i] for i in selected_indices]
+        
+        logger.info(f"RFE selected {len(selected_features)} features: {selected_features}")
+        
+        # Store results
+        self.rfe_model = rfe
+        self.selected_features = selected_features
+        self.selected_feature_indices = selected_indices
+        
+        # Log feature rankings
+        feature_ranking = [(self.feature_names[i], rfe.ranking_[i]) for i in range(len(self.feature_names))]
+        feature_ranking.sort(key=lambda x: x[1])
+        logger.info("Feature rankings (lower is better):")
+        for feature, rank in feature_ranking:
+            logger.info(f"  - {feature}: {rank}")
+        
+        return self
+    
+    def get_rfe_results(self):
+        """Get RFE results for analysis"""
+        if not self.rfe_enabled or self.rfe_model is None:
+            return None
+        
+        results = {
+            'selected_features': self.selected_features,
+            'feature_rankings': []
+        }
+        
+        # Add rankings for all features
+        if hasattr(self.rfe_model, 'ranking_'):
+            for i, feature in enumerate(self.feature_names):
+                results['feature_rankings'].append({
+                    'feature': feature,
+                    'rank': int(self.rfe_model.ranking_[i]),
+                    'selected': i in self.selected_feature_indices
+                })
+            
+            # Sort by rank
+            results['feature_rankings'].sort(key=lambda x: x['rank'])
+        
+        return results

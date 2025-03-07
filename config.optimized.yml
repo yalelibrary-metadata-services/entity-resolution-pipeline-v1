@@ -126,7 +126,7 @@ features:
     person: 1.0
     title: 0.6
     provision: 0.4
-    subjects: 0.5
+    subjects: 0.6
     composite: 0.8
   
   # Interaction features
@@ -145,20 +145,20 @@ features:
   
   # Feature selection
   recursive_feature_elimination:
-    enabled: false
+    enabled: true 
     step: 1
     cv: 5
   
   # Name matching with birth/death years
   exact_name_prefilter:
     enabled: true
-    override_threshold: 0.9  # Confidence threshold to override
+    override_threshold: 0.0  # Confidence threshold to override
 
 # Classification settings
 classification:
   algorithm: "logistic_regression"
-  match_threshold: 0.7      # Threshold for positive match
-  max_iterations: 1000      # Maximum iterations for gradient descent
+  match_threshold: 0.60      # Threshold for positive match
+  max_iterations: 2000      # Maximum iterations for gradient descent
   learning_rate: 0.01       # Learning rate for gradient descent
   regularization:
     type: "l2"              # l1, l2, or elasticnet

@@ -64,8 +64,15 @@ class Classifier:
         # Processing state
         self.trained = False
     
-    def train(self, feature_vectors, labels, feature_names=None):
-        """Train the classifier"""
+    def train(self, feature_vectors, labels, feature_names=None, record_pairs=None):
+        """Train the classifier with enhanced reporting capabilities
+        
+        Args:
+            feature_vectors: Array of feature vectors
+            labels: Array of binary labels
+            feature_names: Optional list of feature names
+            record_pairs: Optional list of record pair IDs corresponding to feature vectors
+        """
         with Timer() as timer:
             print("\n==== Starting Classifier Training ====")
             logger.info("Starting classifier training")
@@ -89,10 +96,19 @@ class Classifier:
             X = self._normalize_features(X)
             
             # Split data into train, validation, and test sets
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=1-self.train_test_split, random_state=42
+            # Keep track of indices for later reference
+            indices = np.arange(len(X))
+            X_train, X_test, y_train, y_test, train_indices, test_indices = train_test_split(
+                X, y, indices, test_size=1-self.train_test_split, random_state=42
             )
             
+            # Store record pair IDs for the test set if provided
+            if record_pairs is not None:
+                self.pair_ids = [record_pairs[i] for i in test_indices]
+                logger.info(f"Stored {len(self.pair_ids)} pair IDs for test set")
+            else:
+                self.pair_ids = None
+                
             if self.early_stopping:
                 # Further split training data to create a validation set
                 validation_ratio = self.validation_split / self.train_test_split
@@ -108,19 +124,45 @@ class Classifier:
             # Train using logistic regression with gradient descent
             self._train_logistic_regression(X_train, y_train, X_val, y_val if self.early_stopping else None)
             
+            # Store test data for reporting
+            self.X_test = X_test
+            self.y_test = y_test
+            
+            # Get predictions and scores for test set
+            y_pred_prob = self._sigmoid(X_test.dot(self.weights) + self.bias)
+            y_pred = (y_pred_prob >= self.match_threshold).astype(int)
+            
+            # Store predictions and scores
+            self.test_scores = y_pred_prob
+            self.test_predictions = y_pred
+            
+            # Calculate feature correlation matrix for reporting
+            self.feature_correlation = {}
+            corr_matrix = np.corrcoef(X_test, rowvar=False)
+            for i, name1 in enumerate(self.feature_names):
+                self.feature_correlation[name1] = {}
+                for j, name2 in enumerate(self.feature_names):
+                    if i < corr_matrix.shape[0] and j < corr_matrix.shape[1]:
+                        self.feature_correlation[name1][name2] = float(corr_matrix[i, j])
+            
             # Evaluate on test set
             test_metrics = self._evaluate(X_test, y_test)
             print(f"Test set metrics: Precision: {test_metrics['precision']:.4f}, "
-                  f"Recall: {test_metrics['recall']:.4f}, F1: {test_metrics['f1']:.4f}")
+                f"Recall: {test_metrics['recall']:.4f}, F1: {test_metrics['f1']:.4f}")
             logger.info(f"Test set metrics: Precision: {test_metrics['precision']:.4f}, "
-                      f"Recall: {test_metrics['recall']:.4f}, F1: {test_metrics['f1']:.4f}")
+                    f"Recall: {test_metrics['recall']:.4f}, F1: {test_metrics['f1']:.4f}")
             
-            # Store metrics
+            # Store all metrics
             self.metrics = {
                 'train_metrics': self.metrics,
                 'test_metrics': test_metrics,
                 'feature_importance': self._get_feature_importance()
             }
+            
+            # Log misclassified examples count
+            misclassified_count = np.sum(y_pred != y_test)
+            print(f"Misclassified examples: {misclassified_count} out of {len(y_test)} ({misclassified_count/len(y_test):.2%})")
+            logger.info(f"Misclassified examples: {misclassified_count} out of {len(y_test)} ({misclassified_count/len(y_test):.2%})")
             
             self.trained = True
             
@@ -467,8 +509,8 @@ class Classifier:
         return len(self.match_pairs) > 0
     
     def get_state(self):
-        """Get the current state for checkpointing"""
-        return {
+        """Get the current state for checkpointing with enhanced test data reporting"""
+        state = {
             'weights': self.weights.tolist() if self.weights is not None else None,
             'bias': float(self.bias),
             'metrics': self.metrics,
@@ -476,11 +518,31 @@ class Classifier:
             'feature_max': self.feature_max.tolist() if hasattr(self, 'feature_max') else None,
             'feature_range': self.feature_range.tolist() if hasattr(self, 'feature_range') else None,
             'feature_names': self.feature_names,
-            'trained': self.trained
+            'trained': self.trained,
+            'feature_importance': self._get_feature_importance() if self.trained else None,
+            'feature_correlation': self.feature_correlation if hasattr(self, 'feature_correlation') else None
         }
+        
+        # Add test data components if they exist
+        if hasattr(self, 'X_test'):
+            state['test_data'] = self.X_test.tolist() if self.X_test is not None else None
+        
+        if hasattr(self, 'y_test'):
+            state['test_labels'] = self.y_test.tolist() if self.y_test is not None else None
+        
+        if hasattr(self, 'test_predictions'):
+            state['test_predictions'] = self.test_predictions.tolist() if self.test_predictions is not None else None
+        
+        if hasattr(self, 'test_scores'):
+            state['test_scores'] = self.test_scores.tolist() if self.test_scores is not None else None
+        
+        if hasattr(self, 'pair_ids') and self.pair_ids is not None:
+            state['pair_ids'] = self.pair_ids
+        
+        return state
     
     def load_state(self, state):
-        """Load state from checkpoint"""
+        """Load state from checkpoint with support for test data components"""
         if state['weights'] is not None:
             self.weights = np.array(state['weights'])
         
@@ -497,9 +559,38 @@ class Classifier:
         if state['feature_range'] is not None:
             self.feature_range = np.array(state['feature_range'])
         
+        # Load feature correlation if available
+        if 'feature_correlation' in state and state['feature_correlation'] is not None:
+            self.feature_correlation = state['feature_correlation']
+        
+        # Load test data components if available
+        if 'test_data' in state and state['test_data'] is not None:
+            self.X_test = np.array(state['test_data'])
+        
+        if 'test_labels' in state and state['test_labels'] is not None:
+            self.y_test = np.array(state['test_labels'])
+        
+        if 'test_predictions' in state and state['test_predictions'] is not None:
+            self.test_predictions = np.array(state['test_predictions'])
+        
+        if 'test_scores' in state and state['test_scores'] is not None:
+            self.test_scores = np.array(state['test_scores'])
+        
+        if 'pair_ids' in state:
+            self.pair_ids = state['pair_ids']
+        
         self.trained = state['trained']
         
         logger.info(f"Loaded classifier state: trained={self.trained}")
+        
+        # Log test data availability
+        if hasattr(self, 'X_test') and hasattr(self, 'y_test'):
+            logger.info(f"Loaded test data: {len(self.X_test)} samples")
+            if hasattr(self, 'test_predictions'):
+                misclassified = np.sum(self.test_predictions != self.y_test)
+                logger.info(f"Test set has {misclassified} misclassified examples out of {len(self.y_test)} ({misclassified/len(self.y_test):.2%})")
+        else:
+            logger.info("No test data available in loaded state")
     
     def get_classification_results(self):
         """Get classification results for checkpointing"""
